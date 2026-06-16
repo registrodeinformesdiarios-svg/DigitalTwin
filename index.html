@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gemelo de Proceso · Subestaciones ICE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* Paleta: tablero de instrumentos / esquema unifilar */
+  --bg:#0d1726;            /* lienzo profundo, tipo HMI SCADA */
+  --bg2:#11202f;
+  --panel:#f6f8fa;         /* paneles claros (lado de lectura) */
+  --panel-line:#dce3ea;
+  --ink:#0f1f2e;           /* texto sobre panel claro */
+  --ink-soft:#5d6b78;
+  --canvas-ink:#cdd9e5;    /* texto sobre lienzo oscuro */
+  --canvas-soft:#7d8ea0;
+  --grid:#16273a;
+  /* fases (la estructura es información: cada color es una fase real del ciclo) */
+  --f-diseno:#7c6cf0;
+  --f-tramites:#e0a32e;
+  --f-adquisicion:#1f9e8f;
+  --f-civil:#c98a3e;
+  --f-montaje:#3d8bd4;
+  --f-pcym:#6b78d8;
+  --f-comision:#46b06a;
+  --critical:#ff5a52;      /* ruta crítica: caliente, inequívoco */
+  --energized:#46b06a;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{
+  font-family:'IBM Plex Sans',system-ui,sans-serif;
+  background:var(--bg);color:var(--canvas-ink);
+  display:flex;flex-direction:column;height:100vh;overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+.mono{font-family:'IBM Plex Mono',monospace}
+
+/* ---------- Barra superior ---------- */
+header{
+  display:flex;align-items:center;gap:18px;padding:0 16px;height:56px;
+  background:linear-gradient(180deg,#13243a,#0e1c2d);
+  border-bottom:1px solid #1d3047;flex:0 0 auto;z-index:30;
+}
+.brand{display:flex;align-items:center;gap:11px;min-width:max-content}
+.brand .bug{
+  width:30px;height:30px;border-radius:6px;flex:0 0 auto;position:relative;
+  background:linear-gradient(135deg,#2b5d8a,#173049);border:1px solid #2f4f6e;
+}
+.brand .bug::before,.brand .bug::after{content:"";position:absolute;background:#46b06a}
+.brand .bug::before{left:9px;top:6px;width:2px;height:18px;box-shadow:5px 0 0 #5aa0e0,5px 0 12px #5aa0e0}
+.brand .bug::after{left:6px;top:14px;width:18px;height:2px;opacity:.6}
+.brand h1{font-size:14px;font-weight:600;margin:0;letter-spacing:.2px;line-height:1.1}
+.brand h1 span{display:block;font-size:10.5px;font-weight:400;color:var(--canvas-soft);letter-spacing:.5px;text-transform:uppercase}
+header .sep{width:1px;height:28px;background:#26405a}
+.ctrl{display:flex;align-items:center;gap:7px}
+.ctrl label{font-size:10.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--canvas-soft)}
+select,.btn,input[type=text],input[type=date],input[type=number]{
+  font-family:inherit;font-size:12.5px;color:var(--canvas-ink);
+  background:#0e1d2d;border:1px solid #294056;border-radius:6px;padding:6px 9px;
+}
+select:focus,input:focus,.btn:focus{outline:2px solid #3d8bd4;outline-offset:1px}
+.btn{cursor:pointer;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;transition:background .12s,border-color .12s}
+.btn:hover{background:#16293c;border-color:#3a5a78}
+.btn.primary{background:#1d4e7a;border-color:#2f6ea8}
+.btn.primary:hover{background:#225d90}
+.btn.ghost{background:transparent;border-color:transparent;color:var(--canvas-soft)}
+.btn.ghost:hover{color:var(--canvas-ink);background:#16293c}
+.seg{display:inline-flex;border:1px solid #294056;border-radius:6px;overflow:hidden}
+.seg button{font-family:inherit;font-size:12px;background:#0e1d2d;color:var(--canvas-soft);border:0;padding:6px 12px;cursor:pointer}
+.seg button.on{background:#1d4e7a;color:#fff}
+.spacer{flex:1}
+.hint{font-size:11px;color:var(--canvas-soft)}
+
+/* ---------- Cuerpo ---------- */
+.body{flex:1;display:flex;min-height:0}
+.stage{flex:1;position:relative;min-width:0;background:
+  radial-gradient(circle at 1px 1px,var(--grid) 1px,transparent 0) 0 0/26px 26px,
+  var(--bg);}
+.breadcrumb{position:absolute;top:12px;left:14px;z-index:10;display:flex;align-items:center;gap:8px;font-size:12px}
+.breadcrumb a{color:#6fb0e8;cursor:pointer;text-decoration:none}
+.breadcrumb a:hover{text-decoration:underline}
+.breadcrumb .chev{color:var(--canvas-soft)}
+.stagehint{position:absolute;bottom:12px;left:14px;z-index:5;font-size:11px;color:var(--canvas-soft);
+  background:rgba(13,23,38,.7);padding:4px 9px;border-radius:5px;border:1px solid #1d3047}
+svg#graph{width:100%;height:100%;display:block;cursor:grab}
+svg#graph.panning{cursor:grabbing}
+.node-card{cursor:pointer}
+.node-rect{fill:#13263a;stroke:#2a4258;stroke-width:1.2;transition:stroke .12s}
+.node-card:hover .node-rect{stroke:#5aa0e0}
+.node-card.sel .node-rect{stroke:#6fb0e8;stroke-width:2}
+.node-card.crit .node-rect{stroke:var(--critical);stroke-width:1.8}
+.node-card.dim{opacity:.32}
+.node-title{fill:var(--canvas-ink);font-size:12px;font-weight:500;pointer-events:none}
+.node-meta{fill:var(--canvas-soft);font-size:9.5px;pointer-events:none;font-family:'IBM Plex Mono',monospace}
+.node-stripe{pointer-events:none}
+.edge{fill:none;stroke:#33506e;stroke-width:1.4}
+.edge.crit{stroke:var(--critical);stroke-width:2.2;stroke-opacity:.9}
+.edge.dim{opacity:.18}
+.pbar-bg{fill:#0b1622}
+.pbar-fg{fill:#46b06a}
+.phase-badge{font-size:9px;font-weight:600;letter-spacing:.4px}
+
+/* zoom controls */
+.zoomctl{position:absolute;right:14px;bottom:14px;z-index:10;display:flex;flex-direction:column;gap:6px}
+.zoomctl button{width:32px;height:32px;font-size:16px;border-radius:6px;background:#13243a;border:1px solid #294056;color:var(--canvas-ink);cursor:pointer}
+.zoomctl button:hover{background:#1a3147}
+
+/* ---------- Panel derecho ---------- */
+.side{width:374px;flex:0 0 auto;background:var(--panel);color:var(--ink);
+  border-left:1px solid #07111c;display:flex;flex-direction:column;min-height:0}
+.side .tabs{display:flex;border-bottom:1px solid var(--panel-line);flex:0 0 auto}
+.side .tabs button{flex:1;font-family:inherit;font-size:11.5px;font-weight:600;letter-spacing:.3px;
+  padding:11px 6px;background:none;border:0;border-bottom:2px solid transparent;color:var(--ink-soft);cursor:pointer}
+.side .tabs button.on{color:var(--ink);border-bottom-color:#1d4e7a}
+.side .scroll{overflow-y:auto;flex:1;padding:16px}
+.side .scroll::-webkit-scrollbar{width:9px}.side .scroll::-webkit-scrollbar-thumb{background:#c4ced8;border-radius:5px}
+.pane{display:none}.pane.on{display:block}
+
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:16px}
+.kpi{background:#fff;border:1px solid var(--panel-line);border-radius:9px;padding:11px 12px}
+.kpi .v{font-size:21px;font-weight:600;font-family:'IBM Plex Mono',monospace;line-height:1.1}
+.kpi .l{font-size:10px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.5px;margin-top:4px}
+.kpi.wide{grid-column:1/3}
+.kpi .v.sm{font-size:15px}
+
+h3.sec{font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:var(--ink-soft);
+  margin:18px 0 9px;font-weight:600;display:flex;align-items:center;gap:7px}
+h3.sec::after{content:"";flex:1;height:1px;background:var(--panel-line)}
+
+.legend{display:flex;flex-direction:column;gap:6px}
+.legend .row{display:flex;align-items:center;gap:9px;font-size:12px}
+.legend .sw{width:13px;height:13px;border-radius:3px;flex:0 0 auto}
+.legend .sw.crit{background:none;border:2px solid var(--critical)}
+
+.critlist{list-style:none;margin:0;padding:0}
+.critlist li{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #eef1f4;font-size:12px;cursor:pointer}
+.critlist li:hover{color:#1d4e7a}
+.critlist .dur{margin-left:auto;font-family:'IBM Plex Mono',monospace;color:var(--ink-soft);font-size:11px}
+.critlist .dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto}
+
+/* node detail */
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:10.5px;font-weight:600;
+  padding:3px 9px;border-radius:20px;color:#fff;letter-spacing:.3px}
+.det-title{font-size:16px;font-weight:600;line-height:1.25;margin:10px 0 4px}
+.det-id{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-soft)}
+.dl{display:grid;grid-template-columns:auto 1fr;gap:5px 14px;margin:12px 0;font-size:12.5px}
+.dl dt{color:var(--ink-soft)}
+.dl dd{margin:0;text-align:right;font-family:'IBM Plex Mono',monospace}
+.dl dd.crit{color:var(--critical);font-weight:600}
+.relchips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 2px}
+.relchip{font-size:11px;font-family:'IBM Plex Mono',monospace;background:#eef1f4;border:1px solid var(--panel-line);
+  padding:3px 8px;border-radius:5px;cursor:pointer}
+.relchip:hover{background:#e0e6ec}
+.est{background:#fff;border:1px solid var(--panel-line);border-radius:9px;padding:12px;margin-top:6px}
+.est .estrow{display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0}
+.est .estrow .mono{font-weight:600}
+.est .note{font-size:10.5px;color:var(--ink-soft);margin-top:8px;line-height:1.4}
+.conns{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.connbtn{display:flex;align-items:center;gap:10px;width:100%;text-align:left;font-family:inherit;font-size:12.5px;
+  padding:10px 12px;border-radius:8px;border:1px solid var(--panel-line);background:#fff;color:var(--ink);cursor:pointer}
+.connbtn:hover{border-color:#7da3c4;background:#f3f7fb}
+.connbtn .ic{width:26px;height:26px;border-radius:6px;flex:0 0 auto;display:grid;place-items:center;color:#fff;font-size:13px}
+.connbtn small{display:block;color:var(--ink-soft);font-size:10.5px;font-weight:400}
+.connbtn.unset{opacity:.62}
+.connbtn.unset .badge{margin-left:auto;font-size:9.5px;color:#b25a2e;border:1px solid #e6c3ac;background:#fbf0e6;padding:2px 6px;border-radius:10px}
+.empty{color:var(--ink-soft);font-size:12.5px;text-align:center;padding:34px 10px;line-height:1.5}
+
+/* simulación */
+.simrow{margin:14px 0}
+.simrow .top{display:flex;justify-content:space-between;align-items:baseline;font-size:12.5px;margin-bottom:5px}
+.simrow .top b{font-weight:600}
+.simrow .top .val{font-family:'IBM Plex Mono',monospace;color:#1d4e7a;font-weight:600}
+.simrow input[type=range]{width:100%;accent-color:#1d4e7a}
+.simrow.prov .top b::after{content:" · provisión";font-weight:400;color:#b25a2e;font-size:10.5px}
+.simout{background:#0d1726;color:var(--canvas-ink);border-radius:10px;padding:14px;margin-top:8px}
+.simout .big{font-size:13px;display:flex;justify-content:space-between;padding:4px 0}
+.simout .big .mono{font-weight:600}
+.simout .delta.up{color:#ff7a72}.simout .delta.down{color:#5fce86}.simout .delta.zero{color:var(--canvas-soft)}
+.note-block{font-size:11px;color:var(--ink-soft);line-height:1.5;background:#f0f3f6;border-radius:8px;padding:11px;margin-top:14px}
+
+/* modal */
+.modal-bg{position:fixed;inset:0;background:rgba(6,12,20,.62);z-index:50;display:none;align-items:center;justify-content:center}
+.modal-bg.on{display:flex}
+.modal{background:var(--panel);color:var(--ink);width:min(560px,92vw);max-height:88vh;overflow:auto;border-radius:14px;padding:24px}
+.modal h2{margin:0 0 4px;font-size:18px}
+.modal p.sub{margin:0 0 18px;color:var(--ink-soft);font-size:13px;line-height:1.5}
+.field{margin-bottom:16px}
+.field label{display:block;font-size:12px;font-weight:600;margin-bottom:5px}
+.field input{width:100%;background:#fff;color:var(--ink);border:1px solid var(--panel-line)}
+.field .help{font-size:11px;color:var(--ink-soft);margin-top:5px;line-height:1.45}
+.field .help code{background:#eef1f4;padding:1px 5px;border-radius:4px;font-size:10.5px}
+.modal .actions{display:flex;justify-content:flex-end;gap:9px;margin-top:8px}
+.modal .actions .btn{color:var(--ink);background:#fff;border-color:var(--panel-line)}
+.modal .actions .btn.primary{background:#1d4e7a;color:#fff;border-color:#1d4e7a}
+.tag-new{font-size:10px;background:#46b06a;color:#fff;padding:2px 7px;border-radius:10px;font-weight:600}
+
+@media (max-width:880px){
+  .side{width:300px}
+  header{flex-wrap:wrap;height:auto;padding:8px 12px;gap:10px}
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="bug"></div>
+    <h1>Gemelo de Proceso<span>Desarrollo de subestaciones · ICE</span></h1>
+  </div>
+  <div class="sep"></div>
+  <div class="ctrl">
+    <label>Proyecto</label>
+    <select id="projSel"></select>
+  </div>
+  <div class="ctrl">
+    <label>Vista</label>
+    <div class="seg" id="viewSeg">
+      <button data-v="macro" class="on">Macro</button>
+      <button data-v="detalle">Detalle</button>
+    </div>
+  </div>
+  <div class="spacer"></div>
+  <button class="btn" id="loadBtn">↥ Cargar Curva S</button>
+  <input type="file" id="fileInput" accept=".txt" style="display:none">
+  <button class="btn ghost" id="cfgBtn" title="Conexiones / integraciones">⚙</button>
+</header>
+
+<div class="body">
+  <div class="stage">
+    <div class="breadcrumb" id="breadcrumb"></div>
+    <svg id="graph"><g id="viewport"></g></svg>
+    <div id="emptyOverlay" style="display:none;position:absolute;inset:0;z-index:8;display:none;align-items:center;justify-content:center;text-align:center;pointer-events:none">
+      <div style="max-width:380px;color:var(--canvas-soft);pointer-events:auto">
+        <div style="font-size:34px;opacity:.5;margin-bottom:10px">◔</div>
+        <div id="emptyTitle" style="color:var(--canvas-ink);font-size:15px;font-weight:600;margin-bottom:8px"></div>
+        <div id="emptyMsg" style="font-size:12.5px;line-height:1.55"></div>
+      </div>
+    </div>
+    <div class="stagehint" id="stageHint"></div>
+    <div class="zoomctl">
+      <button id="zoomIn">+</button>
+      <button id="zoomOut">−</button>
+      <button id="zoomFit" title="Ajustar">⤢</button>
+    </div>
+  </div>
+
+  <aside class="side">
+    <div class="tabs">
+      <button data-t="resumen" class="on">Resumen</button>
+      <button data-t="detalle">Selección</button>
+      <button data-t="sim">Escenarios</button>
+    </div>
+    <div class="scroll">
+      <!-- RESUMEN -->
+      <div class="pane on" id="pane-resumen"></div>
+      <!-- DETALLE NODO -->
+      <div class="pane" id="pane-detalle"></div>
+      <!-- SIMULACIÓN -->
+      <div class="pane" id="pane-sim"></div>
+    </div>
+  </aside>
+</div>
+
+<!-- Modal configuración -->
+<div class="modal-bg" id="cfgModal">
+  <div class="modal">
+    <h2>Conexiones del ecosistema</h2>
+    <p class="sub">Enlaza esta plataforma con tus otras herramientas. Cada una recibe el proyecto activo por el parámetro <code>?proyecto=</code>, igual que tu tablero actual. Déjalas vacías si aún no aplica — los botones quedarán como provisión.</p>
+    <div class="field">
+      <label>Plataforma de Curva S</label>
+      <input type="text" id="cfgCurvaS" placeholder="https://usuario.github.io/curva-s/">
+      <div class="help">Se abrirá como <code>{base}?proyecto={proyecto}&actividad={id}</code></div>
+    </div>
+    <div class="field">
+      <label>Galería de fotos</label>
+      <input type="text" id="cfgGaleria" placeholder="https://usuario.github.io/galeria/">
+      <div class="help">Se abrirá como <code>{base}?proyecto={proyecto}&tema={tema}&fecha={fecha}</code> (tema = grupo de la actividad)</div>
+    </div>
+    <div class="field">
+      <label>BIM / Simulación 3D</label>
+      <input type="text" id="cfgBim" placeholder="https://usuario.github.io/bim-subestacion/">
+      <div class="help">Se abrirá como <code>{base}?proyecto={proyecto}&sim={tipo}</code> (tipo = <code>colada</code> o <code>izaje</code>)</div>
+    </div>
+    <div class="field">
+      <label>Identificador del proyecto para URLs (<code>proyecto=</code>)</label>
+      <input type="text" id="cfgProjId" placeholder="ps_los_tecales">
+      <div class="help">Si lo dejas vacío se usa una versión normalizada del nombre del proyecto.</div>
+    </div>
+    <div class="actions">
+      <button class="btn" id="cfgCancel">Cancelar</button>
+      <button class="btn primary" id="cfgSave">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* =========================================================================
+   GEMELO DE PROCESO — Desarrollo de subestaciones (ICE)
+   Plataforma de simulación del proceso completo de concepción de un proyecto.
+   Lienzo (SVG) = esquema de procesos serie/paralelo derivado de la Curva S.
+   - Vista MACRO: ciclo de vida por fases (con simulación paramétrica / CPM).
+   - Vista DETALLE: sub-grafo real de actividades de una fase (cronograma Curva S).
+   Provisiones marcadas con  // === PROVISIÓN === para crecer el sistema.
+   ========================================================================= */
+
+/* ---- Datos embebidos: PS Los Tecales (parseados de la Curva S real) ---- */
+const TECALES = {"proyecto":"PS Los Tecales","FI":"2026-03-24","FF":"2026-05-31","acts":[{"id":"69","n":"Inicio supervisión civil","fi":"2026-03-25","ff":"2026-03-25","g":"Inicio supervisión civil","pf":100,"p":["66"]},{"id":"71","n":"Identificación de malla de tierra","fi":"2026-03-25","ff":"2026-03-26","g":"Elaboración de cimentaciones de equipos de conexión - Mayores","pf":100,"p":["66"]},{"id":"72","n":"Excavación Cimientos Mayores","fi":"2026-03-25","ff":"2026-04-06","g":"Elaboración de cimentaciones de equipos de conexión - Mayores","pf":100,"p":["71"]},{"id":"73","n":"Concreto de Sello de cimentaciones Mayores","fi":"2026-04-06","ff":"2026-04-10","g":"Elaboración de cimentaciones de equipos de conexión - Mayores","pf":100,"p":["72"]},{"id":"74","n":"Colocación de acero y formaleta cimentaciones Mayores","fi":"2026-04-10","ff":"2026-04-16","g":"Elaboración de cimentaciones de equipos de conexión - Mayores","pf":100,"p":["73"]},{"id":"75","n":"Colado de placa cimentaciones Mayores","fi":"2026-04-16","ff":"2026-04-22","g":"Elaboración de cimentaciones de equipos de conexión - Mayores","pf":100,"p":["74"]},{"id":"76","n":"Preparación de junta fría cimentaciones Mayores","fi":"2026-04-22","ff":"2026-04-27","g":"Elaboración de cimentaciones de equipos de conexión - Mayores","pf":100,"p":["75"]},{"id":"77","n":"Colocación de formaleta cimentaciones Mayores","fi":"2026-04-27","ff":"2026-04-30","g":"Elaboración de cimentaciones de equipos de conexión - Mayores","pf":100,"p":["76"]},{"id":"78","n":"Colado de pedestales Cimentaciones Mayores","fi":"2026-04-30","ff":"2026-05-05","g":"Elaboración de cimentaciones de equipos de conexión - Mayores","pf":100,"p":["77"]},{"id":"79","n":"Instalación de pernos cimentaciones Mayores - Dependera de la metodología a utilizar","fi":"2026-05-05","ff":"2026-05-12","g":"Elaboración de cimentaciones de equipos de conexión - Mayores","pf":50,"p":["78"]},{"id":"80","n":"Excavación Cimientos Menores","fi":"2026-04-08","ff":"2026-04-20","g":"Elaboración de cimentaciones de equipos de conexión - Menores","pf":100,"p":["72"]},{"id":"81","n":"Concreto de Sello de cimentaciones Menores","fi":"2026-04-20","ff":"2026-04-24","g":"Elaboración de cimentaciones de equipos de conexión - Menores","pf":100,"p":["80"]},{"id":"82","n":"Colocación de acero y formaleta cimentaciones Menores","fi":"2026-04-24","ff":"2026-04-30","g":"Elaboración de cimentaciones de equipos de conexión - Menores","pf":100,"p":["81"]},{"id":"83","n":"Colado de placa cimentaciones Menores","fi":"2026-04-30","ff":"2026-05-06","g":"Elaboración de cimentaciones de equipos de conexión - Menores","pf":100,"p":["82"]},{"id":"84","n":"Preparación de junta fría cimentaciones Menores","fi":"2026-05-06","ff":"2026-05-11","g":"Elaboración de cimentaciones de equipos de conexión - Menores","pf":100,"p":["83"]},{"id":"85","n":"Colocación de formaleta cimentaciones Menores","fi":"2026-05-11","ff":"2026-05-14","g":"Elaboración de cimentaciones de equipos de conexión - Menores","pf":100,"p":["84"]},{"id":"86","n":"Colado de pedestales cimentaciones Menores","fi":"2026-05-14","ff":"2026-05-19","g":"Elaboración de cimentaciones de equipos de conexión - Menores","pf":100,"p":["85"]},{"id":"87","n":"Instalación de pernos cimentaciones Menores - Dependera de la metodología a utilizar","fi":"2026-03-25","ff":"2026-03-27","g":"Elaboración de cimentaciones de equipos de conexión - Menores","pf":20,"p":["86"]},{"id":"88","n":"Colocación de retículas para cimientos (bajo tierra y colas salientes de equipos)","fi":"2026-05-19","ff":"2026-05-21","g":"Elaboración de cimentaciones de equipos de conexión - Menores","pf":100,"p":["79","86"]},{"id":"89","n":"Relleno de cimentaciones","fi":"2026-05-21","ff":"2026-05-28","g":"Elaboración de cimentaciones de equipos de conexión - Menores","pf":80,"p":["88"]},{"id":"91","n":"Excavaciones","fi":"2026-05-28","ff":"2026-06-02","g":"Elaboración de Canalizaciones","pf":80,"p":["89"]},{"id":"92","n":"Tuberías","fi":"2026-06-02","ff":"2026-06-05","g":"Elaboración de Canalizaciones","pf":70,"p":["91"]},{"id":"93","n":"Colocación concreto 180kg/cm2","fi":"2026-06-05","ff":"2026-06-09","g":"Elaboración de Canalizaciones","pf":70,"p":["92"]},{"id":"94","n":"Rellenos","fi":"2026-06-09","ff":"2026-06-11","g":"Elaboración de Canalizaciones","pf":50,"p":["93"]},{"id":"95","n":"Liberación formal de cimientos con el ICE","fi":"2026-06-11","ff":"2026-06-12","g":"Liberación formal cimiento ICE","pf":95,"p":["94"]},{"id":"97","n":"Excavaciones","fi":"2026-04-20","ff":"2026-04-23","g":"Elaboración de edificio de protecciones (Shellter)","pf":0,"p":["72","80"]},{"id":"98","n":"Cimentaciones","fi":"2026-04-23","ff":"2026-05-04","g":"Elaboración de edificio de protecciones (Shellter)","pf":20,"p":["97"]},{"id":"99","n":"Instalación de Shellter","fi":"2026-05-04","ff":"2026-05-08","g":"Elaboración de edificio de protecciones (Shellter)","pf":0,"p":["98"]},{"id":"100","n":"Acabados","fi":"2026-05-08","ff":"2026-05-13","g":"Elaboración de edificio de protecciones (Shellter)","pf":0,"p":["99"]},{"id":"101","n":"Finalización de obra civil","fi":"2026-06-11","ff":"2026-06-11","g":"Finalización de obra civil","pf":0,"p":["89","94","98"]},{"id":"102","n":"Sistemas eléctricos Shellter","fi":"2026-05-13","ff":"2026-05-19","g":"Sistemas eléctricos Shellter","pf":0,"p":["100"]},{"id":"104","n":"Instalación estructuras mayores - columnas y vigas","fi":"2026-06-12","ff":"2026-06-19","g":"Instalación de estructuras","pf":0,"p":["95"]},{"id":"105","n":"Instalación de estructuras menores","fi":"2026-06-19","ff":"2026-06-30","g":"Instalación de estructuras","pf":2,"p":["104"]},{"id":"106","n":"Instalación barras - Cadena de aisladores y conductores de barras","fi":"2026-06-19","ff":"2026-06-23","g":"Instalación barras","pf":0,"p":["104"]},{"id":"108","n":"Inicio supervisión de montaje equipos","fi":"2026-06-30","ff":"2026-06-30","g":"Inicio supervisión de montaje equipos","pf":0,"p":["101"]},{"id":"110","n":"Inspección por parte de ICE equipo recepcionado","fi":"2026-06-30","ff":"2026-07-01","g":"Instalación de Seccionadoras","pf":20,"p":["108"]},{"id":"111","n":"Aterrizamiento de estructuras","fi":"2026-07-01","ff":"2026-07-02","g":"Instalación de Seccionadoras","pf":0,"p":["110"]},{"id":"112","n":"Montaje de polos","fi":"2026-07-02","ff":"2026-07-07","g":"Instalación de Seccionadoras","pf":0,"p":["111"]},{"id":"113","n":"Aterrizamiento de equipos","fi":"2026-07-07","ff":"2026-07-08","g":"Instalación de Seccionadoras","pf":0,"p":["112"]},{"id":"114","n":"Calibración","fi":"2026-07-08","ff":"2026-07-10","g":"Instalación de Seccionadoras","pf":0,"p":["113"]},{"id":"116","n":"Inspección por parte de ICE equipo recepcionado","fi":"2026-06-30","ff":"2026-07-01","g":"Instalación de Interruptores","pf":0,"p":["108"]},{"id":"117","n":"Aterrizamiento de estructuras","fi":"2026-07-01","ff":"2026-07-02","g":"Instalación de Interruptores","pf":0,"p":["116"]},{"id":"118","n":"Montaje de polos","fi":"2026-07-02","ff":"2026-07-06","g":"Instalación de Interruptores","pf":0,"p":["117"]},{"id":"119","n":"Aterrizamiento de equipos","fi":"2026-07-06","ff":"2026-07-07","g":"Instalación de Interruptores","pf":0,"p":["118"]},{"id":"121","n":"Inspección por parte de ICE equipo recepcionado","fi":"2026-06-30","ff":"2026-07-01","g":"Instalación de TC y TP","pf":0,"p":["108"]},{"id":"122","n":"Aterrizamiento de estructuras","fi":"2026-07-01","ff":"2026-07-02","g":"Instalación de TC y TP","pf":0,"p":["121"]},{"id":"123","n":"Montaje de polos","fi":"2026-07-02","ff":"2026-07-06","g":"Instalación de TC y TP","pf":0,"p":["122"]},{"id":"124","n":"Aterrizamiento de equipos","fi":"2026-07-06","ff":"2026-07-07","g":"Instalación de TC y TP","pf":0,"p":["123"]},{"id":"126","n":"Inspección por parte de ICE equipo recepcionado","fi":"2026-07-10","ff":"2026-07-13","g":"Instalación de pararrayos","pf":0,"p":["108"]},{"id":"127","n":"Aterrizamiento de estructuras","fi":"2026-07-13","ff":"2026-07-14","g":"Instalación de pararrayos","pf":0,"p":["126"]},{"id":"128","n":"Montaje de polos","fi":"2026-07-14","ff":"2026-07-16","g":"Instalación de pararrayos","pf":0,"p":["127"]},{"id":"129","n":"Aterrizamiento de equipos","fi":"2026-07-16","ff":"2026-07-17","g":"Instalación de pararrayos","pf":0,"p":["128"]},{"id":"131","n":"Inicio de supervisión de PCYM","fi":"2026-07-08","ff":"2026-07-09","g":"Inicio de supervisión de PCYM","pf":0,"p":["113"]},{"id":"132","n":"Instalación Cajas Intermedias","fi":"2026-07-08","ff":"2026-07-13","g":"Instalación Cajas Intermedias","pf":0,"p":["113","119","124"]},{"id":"133","n":"Instalación de tablero shelter","fi":"2026-07-15","ff":"2026-07-20","g":"Instalación Tablero Shellter","pf":0,"p":["102"]},{"id":"135","n":"Cableado Seccionadoras","fi":"2026-07-08","ff":"2026-07-10","g":"Cableado de equipo","pf":0,"p":["113"]},{"id":"136","n":"Cableado Interruptores","fi":"2026-07-08","ff":"2026-07-10","g":"Cableado de equipo","pf":0,"p":["119"]},{"id":"137","n":"Cableado TC y TP","fi":"2026-07-13","ff":"2026-07-15","g":"Cableado de equipo","pf":0,"p":["132"]},{"id":"138","n":"Cableado Tableros Shellter","fi":"2026-07-20","ff":"2026-07-27","g":"Cableado de equipo","pf":0,"p":["133"]},{"id":"139","n":"Fijado del cableado","fi":"2026-07-27","ff":"2026-07-29","g":"Fijado del cableado","pf":0,"p":["135","136","137","138"]},{"id":"140","n":"Conexionado de equipos","fi":"2026-07-08","ff":"2026-07-14","g":"Conexionado de equipos","pf":0,"p":[]},{"id":"141","n":"Conexionado tableros","fi":"2026-07-27","ff":"2026-08-03","g":"Conexionado tableros","pf":0,"p":["138"]},{"id":"142","n":"Instalación de equipos en tableros DOCSE - Telemetria, voz y medición comercial","fi":"2026-08-03","ff":"2026-08-05","g":"Instalación de equipos en tableros DOCSE","pf":0,"p":["141"]},{"id":"143","n":"Pruebas de timbrado Con ICE","fi":"2026-08-03","ff":"2026-08-05","g":"Pruebas de timbrado Con ICE","pf":0,"p":["141"]},{"id":"145","n":"Instalación interconexion entre equipos","fi":"2026-07-17","ff":"2026-07-21","g":"Interconexión de equipos","pf":0,"p":["113","119","124","129"]},{"id":"147","n":"Aplicación de las Verificaciones Fisicas de las Obras con ICE","fi":"2026-07-21","ff":"2026-07-22","g":"Verificaciones Fisicas de las Obras","pf":0,"p":["140","145"]},{"id":"148","n":"Aceptación de las Verifcaciones Fisicas por parte de ICE","fi":"2026-07-22","ff":"2026-07-23","g":"Verificaciones Fisicas de las Obras","pf":0,"p":["147"]},{"id":"149","n":"Solicitud de indisponibilidad para conexión a barras","fi":"2026-06-11","ff":"2026-06-12","g":"Solicitud de indisponibilidad para conexión a barras","pf":0,"p":["156","101"]},{"id":"151","n":"Pruebas de Integridad sistema de Puesta a Tierra","fi":"2026-07-17","ff":"2026-07-20","g":"Puesta en marcha","pf":0,"p":["113","119","124","129"]},{"id":"152","n":"Pruebas eléctricas a equipos de potencia","fi":"2026-07-20","ff":"2026-07-24","g":"Puesta en marcha","pf":0,"p":["151"]},{"id":"153","n":"Pruebas de canal de comunicación y telemetría","fi":"2026-08-05","ff":"2026-08-06","g":"Puesta en marcha","pf":0,"p":["142"]},{"id":"154","n":"Pruebas de PC y M (Niveles 0,1,2)","fi":"2026-08-05","ff":"2026-08-12","g":"Puesta en marcha","pf":0,"p":["143"]},{"id":"155","n":"Pruebas de Telemetría con DOCSE","fi":"2026-08-12","ff":"2026-08-17","g":"Puesta en marcha","pf":0,"p":["154"]},{"id":"156","n":"Indisponibilidad para conexión del modulo a la barra existente","fi":"2026-08-17","ff":"2026-08-18","g":"Puesta en marcha","pf":0,"p":["155"]},{"id":"157","n":"Entrega de protocolos de puesta en operación de Subestación","fi":"2026-08-17","ff":"2026-08-17","g":"Puesta en marcha","pf":0,"p":["155"]},{"id":"158","n":"Aprobación por part de ICE de protocolos de puesta en operación","fi":"2026-08-17","ff":"2026-08-31","g":"Puesta en marcha","pf":0,"p":["157"]}]};
+
+/* ---- Registro de proyectos (crece al cargar más Curvas S) ---- */
+const PROJECTS = {};
+PROJECTS[TECALES.proyecto] = TECALES;
+
+/* =========================================================================
+   MODELO MACRO — ciclo de vida del proyecto.
+   Las 3 primeras fases NO están en la Curva S (ocurren antes): son PROVISIONES
+   con duración estimada editable, a sustituir por datos históricos reales.
+   ========================================================================= */
+const PHASES = [
+  {id:'diseno',     name:'Diseño',                          color:'--f-diseno',     prov:true,  estDays:45, pred:[]},
+  {id:'tramites',   name:'Trámites y permisos',             color:'--f-tramites',   prov:true,  estDays:60, pred:['diseno']},
+  {id:'adquisicion',name:'Adquisición de equipos',          color:'--f-adquisicion',prov:true,  estDays:90, pred:['diseno']},
+  {id:'civil',      name:'Obra civil',                      color:'--f-civil',      prov:false, pred:['tramites']},
+  {id:'montaje',    name:'Montaje electromecánico',         color:'--f-montaje',    prov:false, pred:['civil','adquisicion']},
+  {id:'pcym',       name:'Protección, control y medición',  color:'--f-pcym',       prov:false, pred:['montaje']},
+  {id:'comision',   name:'Comisionamiento / Puesta en servicio',color:'--f-comision',prov:false,pred:['pcym']},
+];
+const PHASE = {}; PHASES.forEach(p=>PHASE[p.id]=p);
+
+/* Mapeo grupo de Curva S -> fase macro */
+const GROUP_PHASE = {
+  'Inicio supervisión civil':'civil',
+  'Elaboración de cimentaciones de equipos de conexión - Mayores':'civil',
+  'Elaboración de cimentaciones de equipos de conexión - Menores':'civil',
+  'Elaboración de Canalizaciones':'civil',
+  'Liberación formal cimiento ICE':'civil',
+  'Elaboración de edificio de protecciones (Shellter)':'civil',
+  'Finalización de obra civil':'civil',
+  'Sistemas eléctricos Shellter':'civil',
+  'Instalación de estructuras':'montaje',
+  'Instalación barras':'montaje',
+  'Inicio supervisión de montaje equipos':'montaje',
+  'Instalación de Seccionadoras':'montaje',
+  'Instalación de Interruptores':'montaje',
+  'Instalación de TC y TP':'montaje',
+  'Instalación de pararrayos':'montaje',
+  'Inicio de supervisión de PCYM':'pcym',
+  'Instalación Cajas Intermedias':'pcym',
+  'Instalación Tablero Shellter':'pcym',
+  'Cableado de equipo':'pcym',
+  'Fijado del cableado':'pcym',
+  'Conexionado de equipos':'pcym',
+  'Conexionado tableros':'pcym',
+  'Instalación de equipos en tableros DOCSE':'pcym',
+  'Pruebas de timbrado Con ICE':'comision',
+  'Interconexión de equipos':'comision',
+  'Verificaciones Fisicas de las Obras':'comision',
+  'Solicitud de indisponibilidad para conexión a barras':'comision',
+  'Puesta en marcha':'comision',
+};
+function phaseOfGroup(g){
+  if(GROUP_PHASE[g]) return GROUP_PHASE[g];
+  // fallback por palabras clave
+  const s=(g||'').toLowerCase();
+  if(/prueba|telemetr|timbrado|indisponib|verificaci|puesta en marcha|interconex/.test(s)) return 'comision';
+  if(/cablead|conexionad|tablero|pcym|docse|caja/.test(s)) return 'pcym';
+  if(/instalaci.n de|montaje|estructura|barra|seccionad|interruptor|pararrayo|tc y tp/.test(s)) return 'montaje';
+  return 'civil';
+}
+
+/* === PROVISIÓN: detección de procesos simulables en BIM (request #6) === */
+function bimType(name,group){
+  const s=((name||'')+' '+(group||'')).toLowerCase();
+  if(/colado|concreto|colada|cimentaci|placa|pedestal|sello/.test(s)) return 'colada';
+  if(/montaje de polos|instalaci.n de estructuras|estructuras mayores|instalaci.n barras|shellter|izaj/.test(s)) return 'izaje';
+  return null;
+}
+
+/* === PROVISIÓN: integraciones (configurables desde ⚙, persistidas) === */
+const DEFAULT_CFG = {curvaS:'', galeria:'', bim:'', projId:''};
+let CFG = loadCfg();
+function loadCfg(){ try{ return Object.assign({}, DEFAULT_CFG, JSON.parse(localStorage.getItem('gp_cfg')||'{}')); }catch(e){ return Object.assign({},DEFAULT_CFG);} }
+function saveCfg(){ try{ localStorage.setItem('gp_cfg', JSON.stringify(CFG)); }catch(e){} }
+function projIdFor(name){ return CFG.projId || (name||'').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,''); }
+function buildUrl(kind, extra){
+  const base = CFG[kind]; if(!base) return null;
+  const u = new URL(base, location.href);
+  u.searchParams.set('proyecto', projIdFor(state.projName));
+  Object.entries(extra||{}).forEach(([k,v])=>{ if(v!=null&&v!=='') u.searchParams.set(k,v); });
+  return u.toString();
+}
+
+/* ========================= utilidades de fecha ========================= */
+const DAY=86400000;
+const d2 = s => new Date(s+'T00:00:00');
+function days(a,b){ return Math.round((d2(b)-d2(a))/DAY); }
+function addDays(s,n){ const t=d2(s); t.setDate(t.getDate()+n); return t.toISOString().slice(0,10); }
+function fmtDate(s){ if(!s) return '—'; const m=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']; const t=d2(s); return t.getDate()+' '+m[t.getMonth()]+' '+t.getFullYear(); }
+
+/* ========================= parser de Curva S ========================= */
+function parseCurvaS(text){
+  const lines=text.split(/\r?\n/);
+  let proyecto='',FI='',FF=''; const acts=[]; let g=''; let cur=null;
+  const reAct=/^<<(.+?)>>\((\d+)\)\((\d{4}-\d{2}-\d{2})\)\((\d{4}-\d{2}-\d{2})\)\(([\d,]*)\)\s*$/;
+  const reG=/^<([^<].*?)>\s*$/, reP=/^\((\d+)%\)\s*$/;
+  for(let i=0;i<lines.length;i++){ const L=lines[i].trim(); let m;
+    if(L==='*Proyecto*'){ proyecto=(lines[i+1]||'').trim(); continue; }
+    if(L.startsWith('FI:')){ FI=L.slice(3).trim(); continue; }
+    if(L.startsWith('FF:')){ FF=L.slice(3).trim(); continue; }
+    if(m=L.match(reAct)){ cur={id:m[2],n:m[1],fi:m[3],ff:m[4],g,pf:0,p:m[5]?m[5].split(',').filter(Boolean):[]}; acts.push(cur); continue; }
+    if(m=L.match(reG)){ g=m[1]; continue; }
+    if(m=L.match(reP)){ if(cur) cur.pf=+m[1]; continue; }
+  }
+  if(!proyecto) throw new Error('No se encontró *Proyecto* en el archivo.');
+  if(!acts.length) throw new Error('No se encontraron actividades (<<...>>).');
+  return {proyecto,FI,FF,acts};
+}
+
+/* ========================= motor CPM (ruta crítica) =========================
+   Recibe nodos {id, dur, pred:[ids]} (pred fuera del set se ignoran).
+   Devuelve por id: {es,ef,ls,lf,slack,crit} y duración total del proyecto.   */
+function cpm(nodes){
+  const byId={}; nodes.forEach(n=>byId[n.id]=n);
+  const preds={}, succ={}; nodes.forEach(n=>{preds[n.id]=(n.pred||[]).filter(p=>byId[p]); succ[n.id]=[];});
+  nodes.forEach(n=>preds[n.id].forEach(p=>succ[p].push(n.id)));
+  // orden topológico (Kahn) con guarda anti-ciclo
+  const indeg={}; nodes.forEach(n=>indeg[n.id]=preds[n.id].length);
+  const q=nodes.filter(n=>indeg[n.id]===0).map(n=>n.id); const order=[];
+  while(q.length){ const id=q.shift(); order.push(id); succ[id].forEach(s=>{ if(--indeg[s]===0) q.push(s); }); }
+  if(order.length<nodes.length){ nodes.forEach(n=>{ if(!order.includes(n.id)) order.push(n.id); }); } // ciclo: fallback
+  const R={}; nodes.forEach(n=>R[n.id]={es:0,ef:0,ls:0,lf:0,slack:0,crit:false});
+  // forward
+  order.forEach(id=>{ const es=preds[id].length?Math.max(...preds[id].map(p=>R[p].ef)):0; R[id].es=es; R[id].ef=es+(byId[id].dur||0); });
+  const total=Math.max(0,...nodes.map(n=>R[n.id].ef));
+  // backward
+  [...order].reverse().forEach(id=>{ const lf=succ[id].length?Math.min(...succ[id].map(s=>R[s].ls)):total; R[id].lf=lf; R[id].ls=lf-(byId[id].dur||0); R[id].slack=R[id].ls-R[id].es; R[id].crit=R[id].slack<=0.0001; });
+  return {R,total,preds,succ};
+}
+
+/* ========================= construir grafo según vista ========================= */
+function macroNodes(proj){
+  // duración de fases Curva S = (max ff - min fi) de sus actividades
+  const byPhase={}; PHASES.forEach(p=>byPhase[p.id]=[]);
+  proj.acts.forEach(a=>{ byPhase[phaseOfGroup(a.g)].push(a); });
+  const realStart={}, realEnd={}, avance={};
+  ['civil','montaje','pcym','comision'].forEach(pid=>{
+    const list=byPhase[pid]; if(!list.length){ return; }
+    realStart[pid]=list.reduce((m,a)=>a.fi<m?a.fi:m,list[0].fi);
+    realEnd[pid]=list.reduce((m,a)=>a.ff>m?a.ff:m,list[0].ff);
+    let wsum=0,w=0; list.forEach(a=>{ const dr=Math.max(days(a.fi,a.ff),0.25); wsum+=a.pf*dr; w+=dr; });
+    avance[pid]= w? Math.round(wsum/w):0;
+  });
+  return PHASES.map(p=>{
+    let dur;
+    if(p.prov){ dur = state.simDur[p.id]!=null ? state.simDur[p.id] : p.estDays; }
+    else { dur = (realStart[p.id]&&realEnd[p.id]) ? Math.max(days(realStart[p.id],realEnd[p.id]),1) : 1; }
+    return {id:p.id, n:p.name, phase:p.id, prov:p.prov, dur,
+            count:byPhase[p.id].length, pf: p.prov?0:(avance[p.id]||0),
+            fi:realStart[p.id]||null, ff:realEnd[p.id]||null, pred:[...p.pred]};
+  });
+}
+function detailNodes(proj, phaseId){
+  const list = proj.acts.filter(a=>phaseOfGroup(a.g)===phaseId);
+  const ids=new Set(list.map(a=>a.id));
+  return list.map(a=>({
+    id:a.id, n:a.n, phase:phaseId, group:a.g, prov:false,
+    dur: Math.max(days(a.fi,a.ff),0), fi:a.fi, ff:a.ff, pf:a.pf,
+    pred:a.p.filter(p=>ids.has(p)), bim:bimType(a.n,a.g)
+  }));
+}
+
+/* ========================= layout por capas (DAG) ========================= */
+function layout(nodes){
+  const byId={}; nodes.forEach(n=>byId[n.id]=n);
+  const preds={}; nodes.forEach(n=>preds[n.id]=(n.pred||[]).filter(p=>byId[p]));
+  // capa = camino más largo desde raíces
+  const layer={}; const order = topo(nodes,preds);
+  order.forEach(id=>{ layer[id]= preds[id].length? Math.max(...preds[id].map(p=>layer[p]+1)):0; });
+  const maxL=Math.max(0,...Object.values(layer));
+  const cols={}; for(let l=0;l<=maxL;l++) cols[l]=[];
+  nodes.forEach(n=>cols[layer[n.id]].push(n));
+  // ordenar dentro de capa: por fase (orden del ciclo) y luego por es/id
+  const pOrder={}; PHASES.forEach((p,i)=>pOrder[p.id]=i);
+  Object.values(cols).forEach(c=>c.sort((a,b)=> (pOrder[a.phase]-pOrder[b.phase]) || (a.fi||'').localeCompare(b.fi||'') || (+a.id - +b.id) ));
+  const NW=196,NH=56,GX=104,GY=20;
+  const colH={}; let maxRows=0;
+  Object.entries(cols).forEach(([l,c])=>{ colH[l]=c.length; if(c.length>maxRows) maxRows=c.length; });
+  const totalH=maxRows*(NH+GY);
+  const pos={};
+  Object.entries(cols).forEach(([l,c])=>{
+    const x=+l*(NW+GX)+30;
+    const blockH=c.length*(NH+GY);
+    const y0=(totalH-blockH)/2 + 30;
+    c.forEach((n,i)=>{ pos[n.id]={x, y:y0+i*(NH+GY), w:NW, h:NH}; });
+  });
+  const W=(maxL+1)*(NW+GX)+60, H=totalH+60;
+  return {pos,NW,NH,W,H,layer};
+}
+function topo(nodes,preds){
+  const succ={}; nodes.forEach(n=>succ[n.id]=[]);
+  nodes.forEach(n=>preds[n.id].forEach(p=>succ[p]&&succ[p].push(n.id)));
+  const indeg={}; nodes.forEach(n=>indeg[n.id]=preds[n.id].length);
+  const q=nodes.filter(n=>indeg[n.id]===0).map(n=>n.id); const out=[];
+  while(q.length){ const id=q.shift(); out.push(id); (succ[id]||[]).forEach(s=>{ if(--indeg[s]===0) q.push(s); }); }
+  nodes.forEach(n=>{ if(!out.includes(n.id)) out.push(n.id); });
+  return out;
+}
+
+/* ========================= estado global ========================= */
+const state = {
+  projName: TECALES.proyecto,
+  view:'macro',        // 'macro' | 'detalle'
+  phaseId:null,        // fase abierta en detalle
+  selId:null,
+  simDur:{},           // overrides de duración de fases-provisión
+  nodes:[], layoutData:null, cpmData:null,
+  zoom:1, panX:0, panY:0
+};
+
+/* ========================= render principal ========================= */
+const vp = document.getElementById('viewport');
+const svg = document.getElementById('graph');
+
+function rebuild(){
+  const proj=PROJECTS[state.projName];
+  if(state.view==='macro'){ state.nodes=macroNodes(proj); }
+  else { state.nodes=detailNodes(proj, state.phaseId); }
+  state.cpmData=cpm(state.nodes.map(n=>({id:n.id,dur:n.dur,pred:n.pred})));
+  state.layoutData=layout(state.nodes);
+  drawGraph();
+  fit();
+  renderBreadcrumb();
+  renderResumen();
+  renderSim();
+  if(state.selId && !state.nodes.find(n=>n.id===state.selId)){ state.selId=null; }
+  renderDetalle();
+  updateStageHint();
+  // overlay para fases-provisión sin actividades en la Curva S
+  const ov=document.getElementById('emptyOverlay');
+  if(state.nodes.length===0){
+    const ph=PHASE[state.phaseId];
+    document.getElementById('emptyTitle').textContent='“'+(ph?ph.name:'Fase')+'” — fase de provisión';
+    document.getElementById('emptyMsg').innerHTML='Esta fase ocurre antes de la construcción y aún no se registra en la Curva S. Su duración se modela en <b>Escenarios</b> y se sustituirá por el desglose de actividades cuando integres su histórico (oficios, plazos de tramitología, órdenes de compra).';
+    ov.style.display='flex';
+  } else { ov.style.display='none'; }
+}
+
+function cssVar(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+
+function drawGraph(){
+  const {pos}=state.layoutData, R=state.cpmData.R;
+  const byId={}; state.nodes.forEach(n=>byId[n.id]=n);
+  let edges='', cards='';
+  // edges
+  state.nodes.forEach(n=>{
+    (n.pred||[]).forEach(p=>{
+      if(!pos[p]||!byId[p]) return;
+      const a=pos[p], b=pos[n.id];
+      const x1=a.x+a.w, y1=a.y+a.h/2, x2=b.x, y2=b.y+b.h/2;
+      const mx=(x1+x2)/2;
+      const crit = R[p]&&R[n.id]&&R[p].crit&&R[n.id].crit;
+      edges+=`<path class="edge ${crit?'crit':''}" data-from="${p}" data-to="${n.id}" d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}"/>`;
+    });
+  });
+  // nodes
+  state.nodes.forEach(n=>{
+    const pp=pos[n.id]; const r=R[n.id];
+    const col=cssVar(PHASE[n.phase].color);
+    const crit=r&&r.crit;
+    const durTxt=`${n.dur} d`;
+    const idTxt = state.view==='macro' ? (n.count?`${n.count} act.`:'—') : '#'+n.id;
+    const title=trunc(n.n, state.view==='macro'?26:24);
+    const pf=Math.max(0,Math.min(100,n.pf||0));
+    cards+=`<g class="node-card ${crit?'crit':''} ${state.selId===n.id?'sel':''}" data-id="${n.id}" transform="translate(${pp.x},${pp.y})">
+      <rect class="node-rect" width="${pp.w}" height="${pp.h}" rx="9"/>
+      <rect class="node-stripe" x="0" y="0" width="5" height="${pp.h}" rx="2.5" fill="${col}"/>
+      <text class="node-title" x="16" y="21">${esc(title)}</text>
+      <text class="node-meta" x="16" y="38">${esc(idTxt)} · ${durTxt}${crit?' · crítica':''}</text>
+      <rect class="pbar-bg" x="16" y="44" width="${pp.w-32}" height="4" rx="2"/>
+      <rect class="pbar-fg" x="16" y="44" width="${(pp.w-32)*pf/100}" height="4" rx="2"/>
+      ${n.bim?`<circle cx="${pp.w-14}" cy="16" r="4.5" fill="${cssVar('--energized')}" opacity=".9"><title>Simulable en BIM (${n.bim})</title></circle>`:''}
+    </g>`;
+  });
+  vp.innerHTML = edges + cards;
+  // listeners
+  vp.querySelectorAll('.node-card').forEach(el=>{
+    el.addEventListener('click',ev=>{ ev.stopPropagation(); selectNode(el.dataset.id); });
+    el.addEventListener('dblclick',ev=>{ ev.stopPropagation(); if(state.view==='macro'){ openPhase(el.dataset.id); } });
+  });
+}
+function esc(s){ return (s+'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+function trunc(s,n){ return s.length>n ? s.slice(0,n-1)+'…' : s; }
+
+/* ---- selección / resaltado ---- */
+function selectNode(id){
+  state.selId=id;
+  vp.querySelectorAll('.node-card').forEach(el=>el.classList.toggle('sel', el.dataset.id===id));
+  // resaltar vecindad
+  const {preds,succ}=state.cpmData;
+  const near=new Set([id, ...(preds[id]||[]), ...(succ[id]||[])]);
+  vp.querySelectorAll('.node-card').forEach(el=>el.classList.toggle('dim', !near.has(el.dataset.id)));
+  vp.querySelectorAll('.edge').forEach(e=>{ const on=(e.dataset.from===id||e.dataset.to===id); e.classList.toggle('dim', !on); });
+  switchTab('detalle'); renderDetalle();
+}
+function clearSelect(){
+  state.selId=null;
+  vp.querySelectorAll('.node-card').forEach(el=>{el.classList.remove('sel');el.classList.remove('dim');});
+  vp.querySelectorAll('.edge').forEach(e=>e.classList.remove('dim'));
+  renderDetalle();
+}
+svg.addEventListener('click',clearSelect);
+
+function openPhase(phaseId){
+  if(PHASE[phaseId].prov){ // las fases-provisión no tienen detalle de Curva S aún
+    state.view='detalle'; state.phaseId=phaseId; setView('detalle'); // mostrará estado vacío informativo
+  } else {
+    state.phaseId=phaseId; state.view='detalle'; setView('detalle');
+  }
+}
+
+/* ========================= breadcrumb / vista ========================= */
+function renderBreadcrumb(){
+  const bc=document.getElementById('breadcrumb');
+  if(state.view==='macro'){ bc.innerHTML=`<b style="color:var(--canvas-ink);font-weight:600">${esc(state.projName)}</b> <span class="chev">·</span> <span style="color:var(--canvas-soft)">ciclo de vida</span>`; }
+  else { bc.innerHTML=`<a id="bcHome">${esc(state.projName)}</a> <span class="chev">›</span> <b style="color:var(--canvas-ink);font-weight:600">${esc(PHASE[state.phaseId].name)}</b>`;
+    document.getElementById('bcHome').addEventListener('click',()=>{ setView('macro'); }); }
+}
+function setView(v){
+  state.view=v;
+  document.querySelectorAll('#viewSeg button').forEach(b=>b.classList.toggle('on', b.dataset.v===v));
+  if(v==='macro') state.phaseId=null;
+  if(v==='detalle' && !state.phaseId) state.phaseId='civil';
+  state.selId=null;
+  rebuild();
+}
+document.querySelectorAll('#viewSeg button').forEach(b=>b.addEventListener('click',()=>setView(b.dataset.v)));
+
+function updateStageHint(){
+  const h=document.getElementById('stageHint');
+  if(state.view==='macro') h.textContent='Doble clic en una fase para ver sus actividades · arrastra para mover · rueda para zoom';
+  else h.textContent='Sub-grafo real de la Curva S · columnas = actividades que pueden ir en paralelo';
+}
+
+/* ========================= panel: RESUMEN ========================= */
+function renderResumen(){
+  const el=document.getElementById('pane-resumen');
+  const R=state.cpmData.R, total=state.cpmData.total;
+  const critCount=state.nodes.filter(n=>R[n.id]&&R[n.id].crit).length;
+  // avance global ponderado por duración
+  let wsum=0,w=0; state.nodes.forEach(n=>{ const dr=Math.max(n.dur,0.25); wsum+=(n.pf||0)*dr; w+=dr; });
+  const avance=w?Math.round(wsum/w):0;
+  // fechas
+  let fini=null,ffin=null;
+  state.nodes.forEach(n=>{ if(n.fi&&(!fini||n.fi<fini))fini=n.fi; if(n.ff&&(!ffin||n.ff>ffin))ffin=n.ff; });
+  const ctx = state.view==='macro' ? 'Ciclo de vida completo' : PHASE[state.phaseId].name;
+
+  el.innerHTML=`
+    <div class="kpis">
+      <div class="kpi wide"><div class="v">${total} <span style="font-size:13px;color:var(--ink-soft)">días</span></div><div class="l">Duración por ruta crítica · ${esc(ctx)}</div></div>
+      <div class="kpi"><div class="v">${state.nodes.length}</div><div class="l">${state.view==='macro'?'Fases':'Actividades'}</div></div>
+      <div class="kpi"><div class="v">${critCount}</div><div class="l">En ruta crítica</div></div>
+      <div class="kpi"><div class="v">${avance}<span style="font-size:13px">%</span></div><div class="l">Avance ponderado</div></div>
+      <div class="kpi"><div class="v sm">${state.view==='macro'?(fmtDate(fini)):(fmtDate(fini))}</div><div class="l">Inicio (Curva S)</div></div>
+    </div>
+    <h3 class="sec">Ruta crítica</h3>
+    <ul class="critlist" id="critList"></ul>
+    <h3 class="sec">Fases del ciclo</h3>
+    <div class="legend" id="legend"></div>
+    <div class="note-block">
+      La <b>duración por ruta crítica</b> se calcula con CPM sobre el grafo de dependencias.
+      En vista macro, las fases <b>Diseño</b>, <b>Trámites</b> y <b>Adquisición</b> usan duraciones provisionales editables en <b>Escenarios</b> hasta cargar datos históricos reales.
+    </div>`;
+  // lista ruta crítica
+  const cl=document.getElementById('critList');
+  const crit=state.nodes.filter(n=>R[n.id]&&R[n.id].crit).sort((a,b)=>R[a.id].es-R[b.id].es);
+  if(!crit.length){ cl.innerHTML='<li style="cursor:default;color:var(--ink-soft)">Sin ruta crítica definida</li>'; }
+  crit.forEach(n=>{
+    const li=document.createElement('li');
+    li.innerHTML=`<span class="dot" style="background:${cssVar(PHASE[n.phase].color)}"></span>${esc(trunc(n.n,30))}<span class="dur">${n.dur} d</span>`;
+    li.addEventListener('click',()=>selectNode(n.id));
+    cl.appendChild(li);
+  });
+  // leyenda
+  const lg=document.getElementById('legend');
+  const phasesShown = state.view==='macro'? PHASES : PHASES.filter(p=>p.id===state.phaseId);
+  lg.innerHTML = phasesShown.map(p=>`<div class="row"><span class="sw" style="background:${cssVar(p.color)}"></span>${esc(p.name)}</div>`).join('')
+    + `<div class="row"><span class="sw crit"></span>Ruta crítica</div>`
+    + (state.view==='detalle'?`<div class="row"><span class="sw" style="background:var(--energized);border-radius:50%"></span>Simulable en BIM</div>`:'');
+}
+
+/* ========================= panel: DETALLE NODO ========================= */
+function renderDetalle(){
+  const el=document.getElementById('pane-detalle');
+  if(!state.selId){ el.innerHTML=`<div class="empty">Selecciona un nodo del diagrama para ver fechas, holgura, estimación histórica y conexiones con tus otras plataformas.</div>`; return; }
+  const n=state.nodes.find(x=>x.id===state.selId); if(!n){ el.innerHTML=''; return; }
+  const r=state.cpmData.R[n.id];
+  const col=cssVar(PHASE[n.phase].color);
+  const {preds,succ}=state.cpmData;
+  const est = estimate(n);
+
+  let conns='';
+  if(state.view==='detalle'){
+    const curvaUrl=buildUrl('curvaS',{actividad:n.id});
+    const galUrl=buildUrl('galeria',{tema:n.group, fecha:n.fi});
+    const bimUrl=n.bim?buildUrl('bim',{sim:n.bim}):null;
+    conns=`<h3 class="sec">Conexiones</h3><div class="conns">
+      ${connBtn('curvaS',curvaUrl,'#3d8bd4','◷','Abrir en Curva S','Avance y cronograma de esta actividad')}
+      ${connBtn('galeria',galUrl,'#1f9e8f','▦','Ver fotos','Tema “'+trunc(n.group||'',22)+'” · '+fmtDate(n.fi))}
+      ${n.bim?connBtn('bim',bimUrl,'#46b06a','◈','Simular en BIM','Proceso: '+n.bim) : ''}
+    </div>`;
+  }
+
+  el.innerHTML=`
+    <span class="chip" style="background:${col}">${esc(PHASE[n.phase].name)}</span>
+    ${n.prov?'<span class="tag-new" style="background:#b25a2e;margin-left:6px">provisión</span>':''}
+    <div class="det-title">${esc(n.n)}</div>
+    <div class="det-id">${state.view==='macro'?(n.count+' actividades'):('ID '+n.id)}</div>
+    <dl class="dl">
+      <dt>Duración</dt><dd>${n.dur} días</dd>
+      <dt>Inicio</dt><dd>${fmtDate(n.fi)}</dd>
+      <dt>Fin</dt><dd>${fmtDate(n.ff)}</dd>
+      <dt>Holgura</dt><dd class="${r.crit?'crit':''}">${r.crit?'0 · crítica':r.slack+' días'}</dd>
+      <dt>Avance</dt><dd>${Math.round(n.pf||0)}%</dd>
+    </dl>
+    ${relBlock('Predecesores',preds[n.id])}
+    ${relBlock('Sucesores',succ[n.id])}
+    <h3 class="sec">Estimación histórica</h3>
+    <div class="est">
+      <div class="estrow"><span>P50 (mediana)</span><span class="mono">${est.n?est.p50+' d':'—'}</span></div>
+      <div class="estrow"><span>P80</span><span class="mono">${est.n?est.p80+' d':'—'}</span></div>
+      <div class="estrow"><span>Rango</span><span class="mono">${est.n?est.min+'–'+est.max+' d':'—'}</span></div>
+      <div class="estrow"><span>Muestra</span><span class="mono">${est.n} proyecto${est.n===1?'':'s'}</span></div>
+      <div class="note">${est.n<=1?'Estimación basada en un solo proyecto. Carga la Curva S de ST NUMU, PS Las Cañas u otros para enriquecer P50/P80 por tipo de actividad.':'Agregado de '+est.n+' proyectos por tipo de actividad.'}</div>
+    </div>
+    ${conns}`;
+  // listeners de chips de relación
+  el.querySelectorAll('.relchip').forEach(c=>c.addEventListener('click',()=>{ if(state.nodes.find(x=>x.id===c.dataset.id)) selectNode(c.dataset.id); }));
+  el.querySelectorAll('.connbtn[data-url]').forEach(b=>b.addEventListener('click',()=>{ const u=b.dataset.url; if(u) window.open(u,'_blank'); }));
+}
+function relBlock(label, ids){
+  if(!ids||!ids.length) return `<div style="font-size:11px;color:var(--ink-soft);margin:4px 0">${label}: ninguno</div>`;
+  const byId={}; state.nodes.forEach(n=>byId[n.id]=n);
+  return `<div style="font-size:11px;color:var(--ink-soft);margin-top:8px">${label}</div><div class="relchips">`+
+    ids.map(id=>`<span class="relchip" data-id="${id}">${esc(byId[id]?trunc(byId[id].n,18):'#'+id)}</span>`).join('')+`</div>`;
+}
+function connBtn(kind,url,color,icon,title,sub){
+  if(!url) return `<button class="connbtn unset" disabled><span class="ic" style="background:${color}">${icon}</span><span><b>${title}</b><small>${esc(sub)}</small></span><span class="badge">configurar ⚙</span></button>`;
+  return `<button class="connbtn" data-url="${esc(url)}"><span class="ic" style="background:${color}">${icon}</span><span><b>${title}</b><small>${esc(sub)}</small></span></button>`;
+}
+
+/* === PROVISIÓN: motor de estimación histórica (request #4) ===
+   Agrega duraciones por "tipo de actividad" (clave normalizada de nombre+grupo)
+   sobre TODOS los proyectos del registro. Crece al cargar más Curvas S.       */
+function typeKey(name,group){
+  const norm = s => (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/mayores|menores|\d+/g,'').replace(/[^a-z ]/g,' ').replace(/\s+/g,' ').trim();
+  return state.view==='macro' ? 'fase:'+name : norm(group)+'|'+norm(name);
+}
+function estimate(n){
+  const key = state.view==='macro' ? 'fase:'+n.n : typeKey(n.n,n.group);
+  const samples=[];
+  if(state.view==='macro'){
+    // por fase: una observación de duración por proyecto
+    Object.values(PROJECTS).forEach(proj=>{
+      const list=proj.acts.filter(a=>phaseOfGroup(a.g)===n.phase);
+      if(!list.length) return;
+      const s=list.reduce((m,a)=>a.fi<m?a.fi:m,list[0].fi), e=list.reduce((m,a)=>a.ff>m?a.ff:m,list[0].ff);
+      samples.push(Math.max(days(s,e),1));
+    });
+  } else {
+    Object.values(PROJECTS).forEach(proj=>{
+      proj.acts.forEach(a=>{ if(typeKey(a.n,a.g)===key){ const d=days(a.fi,a.ff); if(d>0) samples.push(d); } });
+    });
+  }
+  if(!samples.length) return {n:0};
+  samples.sort((a,b)=>a-b);
+  const q=p=>samples[Math.min(samples.length-1, Math.floor(p*(samples.length-1)))];
+  return {n:samples.length, p50:q(0.5), p80:q(0.8), min:samples[0], max:samples[samples.length-1]};
+}
+
+/* ========================= panel: ESCENARIOS (what-if) ========================= */
+function renderSim(){
+  const el=document.getElementById('pane-sim');
+  // baseline: duraciones provisión por defecto
+  const provs=PHASES.filter(p=>p.prov);
+  let rows = provs.map(p=>{
+    const cur = state.simDur[p.id]!=null?state.simDur[p.id]:p.estDays;
+    return `<div class="simrow prov">
+      <div class="top"><b>${esc(p.name)}</b><span class="val" id="val-${p.id}">${cur} d</span></div>
+      <input type="range" min="0" max="240" step="5" value="${cur}" data-phase="${p.id}">
+    </div>`;
+  }).join('');
+
+  el.innerHTML=`
+    <p class="hint" style="color:var(--ink-soft);margin:0 0 6px">Ajusta las fases previas a la construcción y observa el impacto en la <b>puesta en servicio</b>. Estas duraciones son provisionales hasta integrar el histórico real.</p>
+    ${rows}
+    <h3 class="sec">Resultado del escenario</h3>
+    <div class="simout" id="simOut"></div>
+    <button class="btn ghost" id="simReset" style="margin-top:12px;color:#1d4e7a">↺ Restablecer a valores base</button>
+    <div class="note-block">El motor recalcula la ruta crítica del ciclo completo (CPM). Para escenarios sobre actividades específicas (tramitología, entrega de equipos, cuadrillas), esta misma lógica se extenderá al nivel de detalle cuando conectes el histórico por tipo de actividad.</div>`;
+
+  el.querySelectorAll('input[type=range]').forEach(r=>{
+    r.addEventListener('input',()=>{
+      state.simDur[r.dataset.phase]=+r.value;
+      document.getElementById('val-'+r.dataset.phase).textContent=r.value+' d';
+      if(state.view==='macro') rebuild(); else computeSimOut();
+      computeSimOut();
+    });
+  });
+  document.getElementById('simReset').addEventListener('click',()=>{ state.simDur={}; renderSim(); if(state.view==='macro') rebuild(); });
+  computeSimOut();
+}
+function baselineMacroTotal(){
+  const proj=PROJECTS[state.projName];
+  const saved=state.simDur; state.simDur={}; // baseline
+  const nodes=macroNodes(proj); const t=cpm(nodes.map(n=>({id:n.id,dur:n.dur,pred:n.pred}))).total;
+  state.simDur=saved; return t;
+}
+function computeSimOut(){
+  const out=document.getElementById('simOut'); if(!out) return;
+  const proj=PROJECTS[state.projName];
+  const nodes=macroNodes(proj);
+  const res=cpm(nodes.map(n=>({id:n.id,dur:n.dur,pred:n.pred})));
+  const total=res.total;
+  const base=baselineMacroTotal();
+  const delta=total-base;
+  // fecha de puesta en servicio: anclar inicio de proyecto = (inicio real obra civil) - (cadena provisión base)
+  const civil=nodes.find(n=>n.id==='civil');
+  // longitud de cadena de provisión que precede a civil en el escenario actual
+  const esCivil=res.R['civil']?res.R['civil'].es:0;
+  // total real desde civil en adelante (fijo por Curva S): usar fechas reales
+  let realEnd=null; ['civil','montaje','pcym','comision'].forEach(pid=>{ const nn=nodes.find(n=>n.id===pid); if(nn&&nn.ff&&(!realEnd||nn.ff>realEnd))realEnd=nn.ff; });
+  const baseEsCivil = (function(){ const s=state.simDur; state.simDur={}; const r=cpm(macroNodes(proj).map(n=>({id:n.id,dur:n.dur,pred:n.pred}))); state.simDur=s; return r.R['civil']?r.R['civil'].es:0; })();
+  const shift = esCivil - baseEsCivil;
+  const newPuesta = realEnd? addDays(realEnd, shift): null;
+  const cls = delta>0?'up':(delta<0?'down':'zero');
+  const sign = delta>0?'+':'';
+  out.innerHTML=`
+    <div class="big"><span>Duración total del ciclo</span><span class="mono">${total} d</span></div>
+    <div class="big"><span>Δ vs. línea base</span><span class="mono delta ${cls}">${sign}${delta} d</span></div>
+    <div class="big"><span>Puesta en servicio estimada</span><span class="mono">${fmtDate(newPuesta)}</span></div>`;
+}
+
+/* ========================= tabs panel derecho ========================= */
+document.querySelectorAll('.side .tabs button').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.t)));
+function switchTab(t){
+  document.querySelectorAll('.side .tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
+  document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('on', p.id==='pane-'+t));
+}
+
+/* ========================= zoom & pan ========================= */
+function applyTransform(){ vp.setAttribute('transform',`translate(${state.panX},${state.panY}) scale(${state.zoom})`); }
+function fit(){
+  const {W,H}=state.layoutData; const rect=svg.getBoundingClientRect();
+  const pad=40; const z=Math.min((rect.width-pad)/W,(rect.height-pad)/H,1.4);
+  state.zoom=Math.max(z,0.12);
+  state.panX=(rect.width-W*state.zoom)/2; state.panY=(rect.height-H*state.zoom)/2;
+  applyTransform();
+}
+document.getElementById('zoomIn').onclick=()=>{state.zoom=Math.min(state.zoom*1.2,3);applyTransform();};
+document.getElementById('zoomOut').onclick=()=>{state.zoom=Math.max(state.zoom/1.2,0.1);applyTransform();};
+document.getElementById('zoomFit').onclick=fit;
+svg.addEventListener('wheel',e=>{ e.preventDefault(); const r=svg.getBoundingClientRect(); const mx=e.clientX-r.left,my=e.clientY-r.top;
+  const f=e.deltaY<0?1.12:1/1.12; const nz=Math.max(.1,Math.min(3,state.zoom*f));
+  state.panX=mx-(mx-state.panX)*(nz/state.zoom); state.panY=my-(my-state.panY)*(nz/state.zoom); state.zoom=nz; applyTransform();
+},{passive:false});
+let drag=null;
+svg.addEventListener('mousedown',e=>{ drag={x:e.clientX,y:e.clientY,px:state.panX,py:state.panY}; svg.classList.add('panning'); });
+window.addEventListener('mousemove',e=>{ if(!drag)return; state.panX=drag.px+(e.clientX-drag.x); state.panY=drag.py+(e.clientY-drag.y); applyTransform(); });
+window.addEventListener('mouseup',()=>{ drag=null; svg.classList.remove('panning'); });
+
+/* ========================= proyecto / carga de archivos ========================= */
+function refreshProjSel(){
+  const sel=document.getElementById('projSel'); sel.innerHTML='';
+  Object.keys(PROJECTS).forEach(name=>{ const o=document.createElement('option'); o.value=name; o.textContent=name; sel.appendChild(o); });
+  sel.value=state.projName;
+}
+document.getElementById('projSel').addEventListener('change',e=>{ state.projName=e.target.value; state.selId=null; state.simDur={}; setView('macro'); });
+document.getElementById('loadBtn').onclick=()=>document.getElementById('fileInput').click();
+document.getElementById('fileInput').addEventListener('change',e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const rd=new FileReader();
+  rd.onload=()=>{ try{
+      const data=parseCurvaS(rd.result);
+      PROJECTS[data.proyecto]=data;
+      state.projName=data.proyecto; state.simDur={}; state.selId=null;
+      refreshProjSel(); setView('macro');
+    }catch(err){ alert('No se pudo leer la Curva S: '+err.message); }
+    e.target.value='';
+  };
+  rd.readAsText(f);
+});
+
+/* ========================= modal configuración ========================= */
+const cfgModal=document.getElementById('cfgModal');
+document.getElementById('cfgBtn').onclick=()=>{
+  document.getElementById('cfgCurvaS').value=CFG.curvaS;
+  document.getElementById('cfgGaleria').value=CFG.galeria;
+  document.getElementById('cfgBim').value=CFG.bim;
+  document.getElementById('cfgProjId').value=CFG.projId;
+  cfgModal.classList.add('on');
+};
+document.getElementById('cfgCancel').onclick=()=>cfgModal.classList.remove('on');
+cfgModal.addEventListener('click',e=>{ if(e.target===cfgModal) cfgModal.classList.remove('on'); });
+document.getElementById('cfgSave').onclick=()=>{
+  CFG.curvaS=document.getElementById('cfgCurvaS').value.trim();
+  CFG.galeria=document.getElementById('cfgGaleria').value.trim();
+  CFG.bim=document.getElementById('cfgBim').value.trim();
+  CFG.projId=document.getElementById('cfgProjId').value.trim();
+  saveCfg(); cfgModal.classList.remove('on'); renderDetalle();
+};
+
+/* ========================= arranque ========================= */
+(function init(){
+  // ?proyecto= en la URL selecciona proyecto si coincide (normalizado)
+  const params=new URLSearchParams(location.search);
+  const p=params.get('proyecto');
+  if(p){ const match=Object.keys(PROJECTS).find(n=>projIdFor(n)===p || n===p); if(match) state.projName=match; }
+  refreshProjSel();
+  rebuild();
+  window.addEventListener('resize',()=>{ /* mantener encuadre relativo */ });
+})();
+</script>
+</body>
+</html>
