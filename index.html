@@ -9,7 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <!--
   =============================================================================
-   GEMELO DE PROCESO · Desarrollo de subestaciones (ICE)            versión 2.0
+   GEMELO DE PROCESO · Desarrollo de subestaciones (ICE)            versión 2.1
   -----------------------------------------------------------------------------
    Prototipo del Capítulo 6 (Objetivo 3). Archivo único, sin servidor.
 
@@ -315,13 +315,15 @@ textarea{width:100%;min-height:150px;font-family:'IBM Plex Mono',monospace;font-
     <section class="view" id="v-dist">
       <div class="vhead">
         <div><h2>Distribuciones de duración</h2>
-        <p>Cada actividad estándar toma su distribución de una fuente declarada. En modo <b>automático</b> la prioridad es: criterio experto (cuestionario) → observado en cartera (n ≥ 3) → provisión.</p></div>
+        <p>Cada actividad estándar toma su distribución de una fuente declarada. En modo <b>automático</b> la prioridad es: criterio experto (cuestionario) → calibrado con Curvas S → observado en cartera (n ≥ 3) → provisión.</p></div>
         <div class="tools">
+          <button class="btn pri" id="btnCalib">⚙ Calibrar con Curvas S</button>
           <button class="btn" id="btnExpUp">⇧ Importar distribuciones_calibradas.json</button>
           <input type="file" id="fileExp" accept=".json" hidden>
           <button class="btn ghost" id="btnCatDown">⇩ Catálogo + distribuciones</button>
         </div>
       </div>
+      <div id="calibBanner"></div>
       <div class="card" style="padding:0"><div id="distTable"></div></div>
       <div class="note" style="margin-top:12px" id="distNote"></div>
     </section>
@@ -4932,29 +4934,87 @@ function observadoCartera(){
    -----------------------------------------------------------------------------
    provisión  : valores iniciales del catálogo (a sustituir)
    experto    : importados de distribuciones_calibradas.json (cuestionario)
-   observado  : (mín, mediana, máx) de la cartera, solo si n ≥ 3 terminadas
+   calibrado  : resultado del botón «Calibrar con Curvas S» (§6b), con las curvas elegidas
+   observado  : (mín, mediana, máx) de toda la cartera, solo si n ≥ 3 terminadas
    manual     : editados aquí, con justificación en el informe
-   auto       : experto → observado → provisión
+   auto       : experto → calibrado → observado → provisión
    ============================================================================= */
 const N_MIN_OBS = 3;
 function distDe(id, fuenteForzada){
   const a=ACT[id], fsel=fuenteForzada || WS.fuente[id] || 'auto';
-  const obs=OBS[id], exp=WS.experto[id], man=WS.manual[id];
+  const obs=OBS[id], exp=WS.experto[id], man=WS.manual[id], cal=WS.calibrado[id];
   const disp={
     provision:{min:a.prov[0], moda:a.prov[1], max:a.prov[2]},
     experto: exp ? {min:exp.min, moda:exp.moda, max:exp.max} : null,
+    calibrado: cal ? {min:cal.min, moda:cal.moda, max:cal.max} : null,
     observado: obs && obs.durs.length>=N_MIN_OBS ? (()=>{ const b=[...obs.durs].sort((x,y)=>x-y); return {min:b[0], moda:median(b), max:b[b.length-1]}; })() : null,
     manual: man ? {min:man.min, moda:man.moda, max:man.max} : null,
   };
   let usada=fsel;
-  if(fsel==='auto') usada = disp.experto?'experto':(disp.observado?'observado':'provision');
+  if(fsel==='auto') usada = disp.experto?'experto':(disp.calibrado?'calibrado':(disp.observado?'observado':'provision'));
   if(!disp[usada]) usada='provision';
   const d={...disp[usada]};
   if(d.max<d.min){ const t=d.max; d.max=d.min; d.min=t; }
   d.moda=Math.min(Math.max(d.moda,d.min),d.max);
   return {...d, fuente:usada, seleccion:fsel, disponibles:disp};
 }
-const FUENTES = {provision:'Provisión', experto:'Experto', observado:'Observado', manual:'Manual', auto:'Automático'};
+const FUENTES = {provision:'Provisión', experto:'Experto', calibrado:'Calibrado', observado:'Observado', manual:'Manual', auto:'Automático'};
+
+/* =============================================================================
+   §6b  CALIBRACIÓN AUTOMÁTICA CON CURVAS S SELECCIONADAS
+   -----------------------------------------------------------------------------
+   Para cada actividad, la muestra son las duraciones REALES terminadas (§5) en
+   los proyectos elegidos. Las actividades en curso no entran a la muestra: solo
+   pueden empujar el máximo hacia arriba (límite inferior censurado).
+
+   Distribución "a priori" (forma de referencia): criterio experto si existe,
+   si no la provisión del catálogo. Nunca se usa lo calibrado u observado como
+   a priori (evita circularidad).
+
+   Método según el tamaño de muestra n:
+     n ≥ 3 → TRIANGULAR EMPÍRICA AMPLIADA
+             moda = mediana;  extremos = mín/máx ± (máx − mín)/(n − 1)
+             (la ampliación corrige que el rango de una muestra pequeña
+              subestima el rango real; es el estimador insesgado de los
+              extremos de una uniforme)
+     n = 1 o 2 → FORMA DEL A PRIORI RE-CENTRADA
+             moda = mediana observada; mín y máx conservan las proporciones
+             mín/moda y máx/moda del a priori (se asume que la incertidumbre
+             relativa es la del experto/provisión, pero el nivel lo da el dato)
+   Opcional: mezcla con el a priori con peso equivalente w (en "proyectos"):
+             resultado = (w·apriori + n·muestra) / (w + n), punto a punto.
+   Calidad: n=1 crítica · n=2 advertencia · n=3–4 pequeña · n≥5 aceptable.
+   ============================================================================= */
+function muestraCalib(id, keys){
+  const m={durs:[], proys:[], cens:[], sinAprobar:0};
+  for(const k of keys){ const pr=CACHE[k]; if(!pr) continue; const g=pr.agg[id]; if(!g||!g.n) continue;
+    if(g.dur!=null){ m.durs.push(g.dur); m.proys.push(pr.P.proyecto); if(g.aprobadas<g.n) m.sinAprobar++; }
+    else if(g.durMin!=null) m.cens.push({p:pr.P.proyecto, min:g.durMin}); }
+  return m;
+}
+function aprioriDe(id){ const e=WS.experto[id], a=ACT[id];
+  return e ? {min:e.min, moda:e.moda, max:e.max, fuente:'experto'} : {min:a.prov[0], moda:a.prov[1], max:a.prov[2], fuente:'provision'}; }
+function calidadMuestra(n){ return n>=5?{k:'ok',t:'Aceptable'}:n>=3?{k:'info',t:'Pequeña'}:n===2?{k:'warn',t:'Muy pequeña'}:n===1?{k:'crit',t:'Un solo dato'}:{k:'none',t:'Sin datos'}; }
+function calibrarActividad(id, keys, {peso=0}={}){
+  const m=muestraCalib(id, keys), n=m.durs.length, pri=aprioriDe(id);
+  const r={id, n, muestra:m, apriori:pri, calidad:calidadMuestra(n), avisos:[]};
+  if(!n){ r.metodo='sin datos'; return r; }
+  const b=[...m.durs].sort((x,y)=>x-y), med=median(b), rango=b[n-1]-b[0];
+  let d;
+  if(n>=3 && rango>0){ const ext=rango/(n-1); d={min:Math.max(0,b[0]-ext), moda:med, max:b[n-1]+ext}; r.metodo='Triangular empírica ampliada'; }
+  else { const kmin=pri.min/pri.moda, kmax=pri.max/pri.moda;
+    d={min:med*kmin, moda:med, max:med*kmax};
+    if(n===2){ d.min=Math.min(d.min,b[0]); d.max=Math.max(d.max,b[1]); }
+    r.metodo = n>=3 ? 'Forma del a priori re-centrada (datos sin dispersión)' : 'Forma del a priori re-centrada'; }
+  if(peso>0){ const w=peso; ['min','moda','max'].forEach(k=>d[k]=(w*pri[k]+n*d[k])/(w+n)); r.metodo+=` + mezcla (w=${w})`; }
+  const cmax=m.cens.length?Math.max(...m.cens.map(c=>c.min)):null;
+  if(cmax!=null && cmax>d.max){ d.max=cmax*1.1; r.avisos.push(`Una actividad en curso ya lleva ${cmax} d: se elevó el máximo`); }
+  d.min=Math.max(0,Math.round(d.min)); d.moda=Math.round(d.moda); d.max=Math.round(d.max);
+  if(d.moda<d.min) d.min=d.moda; if(d.max<=d.moda) d.max=d.moda+1;
+  if(m.sinAprobar) r.avisos.push(`${m.sinAprobar} de ${n} proyecto(s) con mapeo sin aprobar en esta actividad`);
+  if(n<3) r.avisos.push('La dispersión viene del a priori ('+FUENTES[pri.fuente].toLowerCase()+'), no de los datos');
+  r.dist=d; return r;
+}
 
 /* =============================================================================
    §7  MOTOR  CPM + MONTE CARLO
@@ -5061,7 +5121,7 @@ function pronostico(pr, {N, seed, tipo}){
    ============================================================================= */
 const WS_KEY='gp2_espacio';
 let WS = nuevoWS();
-function nuevoWS(){ return {esquema:'gp-espacio/1', proyectos:{}, experto:{}, manual:{}, fuente:{}, escenarios:[{nombre:'Escenario 1', aj:{}}],
+function nuevoWS(){ return {esquema:'gp-espacio/1', proyectos:{}, experto:{}, manual:{}, calibrado:{}, calib:null, fuente:{}, escenarios:[{nombre:'Escenario 1', aj:{}}],
   cfg:{umbral:100, curvaS:'', galeria:'', bim:''}, ui:{proy:null, esc:0}}; }
 function guardar(){ try{ localStorage.setItem(WS_KEY, JSON.stringify(WS)); }catch(e){ toast('No se pudo guardar localmente: '+e.message); } }
 function cargarWS(){ try{ const s=localStorage.getItem(WS_KEY); if(s){ WS=Object.assign(nuevoWS(), JSON.parse(s)); return true; } }catch(e){} return false; }
@@ -5431,11 +5491,12 @@ function vDist(){
       const avail=Object.entries(d.disponibles).filter(([,v])=>v).map(([k])=>k);
       // contraste experto vs observado: percentil de cada observación en la distribución usada
       let con='<span class="muted">—</span>';
-      if(o.durs.length && d.fuente!=='observado'){ const ps=o.durs.map(v=>triCdf(d,v)); const fuera=ps.filter(q=>q<.1||q>.9).length;
+      if(o.durs.length && d.fuente!=='observado' && d.fuente!=='calibrado'){ const ps=o.durs.map(v=>triCdf(d,v)); const fuera=ps.filter(q=>q<.1||q>.9).length;
         con = fuera? `<span class="flag warn" data-tip="Percentiles de lo observado en la distribución ${FUENTES[d.fuente]}: ${ps.map(q=>Math.round(q*100)+' %').join(', ')}">▲ ${fuera}/${ps.length} fuera de P10–P90</span>` : `<span class="flag ok" data-tip="Percentiles: ${ps.map(q=>Math.round(q*100)+' %').join(', ')}">✓ converge</span>`; }
       h+=`<tr><td><span class="code" style="color:${colorAct(a.id)}">${a.id}</span> ${esc(a.n)}</td>
-        <td><select class="srcsel" data-id="${a.id}">${['auto','provision','experto','observado','manual'].map(k=>`<option value="${k}" ${d.seleccion===k?'selected':''} ${k!=='auto'&&k!=='manual'&&!avail.includes(k)?'disabled':''}>${FUENTES[k]}${k==='auto'?' → '+FUENTES[d.fuente]:''}${k==='observado'&&!avail.includes(k)?' (n<'+N_MIN_OBS+')':''}${k==='experto'&&!avail.includes(k)?' (sin datos)':''}</option>`).join('')}</select>
-          ${d.fuente==='provision'?' <span class="badge b-sug" data-tip="Valor provisional del catálogo: sustituir con criterio experto u observaciones">provisión</span>':''}</td>
+        <td><select class="srcsel" data-id="${a.id}">${['auto','provision','experto','calibrado','observado','manual'].map(k=>`<option value="${k}" ${d.seleccion===k?'selected':''} ${k!=='auto'&&k!=='manual'&&!avail.includes(k)?'disabled':''}>${FUENTES[k]}${k==='auto'?' → '+FUENTES[d.fuente]:''}${k==='observado'&&!avail.includes(k)?' (n<'+N_MIN_OBS+')':''}${k==='experto'&&!avail.includes(k)?' (sin datos)':''}${k==='calibrado'&&!avail.includes(k)?' (sin calibrar)':''}</option>`).join('')}</select>
+          ${d.fuente==='provision'?' <span class="badge b-sug" data-tip="Valor provisional del catálogo: sustituir con criterio experto u observaciones">provisión</span>':''}
+          ${d.fuente==='calibrado'?(()=>{ const c=WS.calibrado[a.id], q=calidadMuestra(c.n); return ` <span class="badge ${q.k==='crit'?'b-crit':q.k==='warn'?'b-sug':q.k==='info'?'b-info':'b-ok'}" data-tip="${esc(c.metodo)} · ${esc(c.proys.join(', '))}">${q.k==='crit'?'●':q.k==='warn'?'▲':q.k==='info'?'ℹ':'✓'} n=${c.n}</span>`; })():''}</td>
         ${['min','moda','max'].map(k=>`<td class="num">${ed?`<input class="dist-in" type="number" min="0" data-id="${a.id}" data-k="${k}" value="${d[k]}">`:nf(d[k],d[k]%1?1:0)}</td>`).join('')}
         <td>${formaDist(d,o.durs,o.cens)}</td>
         <td style="font-size:11.5px">${o.durs.length?`n=${o.durs.length} · med ${r1(median(o.durs))} d<br><span class="muted">${o.durs.join(', ')} d</span>`:'<span class="muted">sin terminadas</span>'}${o.cens.length?`<br><span class="muted">${o.cens.length} en curso</span>`:''}</td>
@@ -5443,6 +5504,11 @@ function vDist(){
     }
   }
   $('#distTable').innerHTML=h+'</tbody></table>';
+  const C=WS.calib;
+  $('#calibBanner').innerHTML = C ? `<div class="card" style="margin-bottom:12px;border-color:${C.nMin<3?'#6b5320':'#28553a'}"><div class="row"><span class="badge ${C.nMin<3?'b-sug':'b-ok'}">${C.nMin<3?'▲ Muestra pequeña':'✓ Calibrado'}</span>
+      <b>Calibración ${fmtD(C.fecha.slice(0,10))}</b><span class="muted">· ${C.proyectos.length} Curva${C.proyectos.length>1?'s':''} S: ${esc(C.proyectos.join(', '))} · ${C.actividades.length} actividades · umbral ${C.umbral} %${C.peso?` · mezcla w=${C.peso}`:''}</span>
+      <span class="spacer"></span><button class="btn sm" id="btnCalib2">Recalibrar</button><button class="btn sm ghost" id="btnCalibUndo">↺ Deshacer</button></div>
+      ${C.nMin<3?`<p class="sub" style="margin:8px 0 0">Algunas actividades se calibraron con menos de 3 proyectos: su dispersión proviene del a priori y los resultados pueden no ser representativos. Recalibra al cargar más Curvas S.</p>`:''}</div>` : '';
   const nExp=Object.keys(WS.experto).length;
   $('#distNote').innerHTML=`<b>Contraste experto ↔ observado</b> (validación cruzada del capítulo 6): para cada duración observada se calcula su percentil dentro de la distribución usada; si cae fuera de P10–P90 se marca. Expertos importados: <b>${nExp}</b> actividades. Las provisiones deben sustituirse antes de reportar resultados definitivos.`;
 }
@@ -5468,7 +5534,7 @@ function vRed(){
     s+=`<g class="nnode ${SELNODE===a.id?'sel':''} ${cr!=null&&cr>=.5?'crit':''}" data-node="${a.id}" transform="translate(${P.x},${P.y})" data-tip="${esc(`<b>${a.id} ${a.n}</b><br>${a.d}<br><br>Distribución (${FUENTES[d.fuente]}): ${nf(d.min)} · ${nf(d.moda)} · ${nf(d.max)} d${cr!=null?'<br>Índice de criticidad: '+nf(cr*100)+' %':''}`)}">
       <rect class="box" width="${NW}" height="${NH}" rx="9"/><rect width="5" height="${NH}" rx="2.5" fill="${c}"/>
       <text x="13" y="17" font-size="11" font-weight="600" class="mono" fill="${c}">${a.id}</text>
-      <text x="${NW-8}" y="17" font-size="9.5" text-anchor="end" fill="${d.fuente==='provision'?cssv('--warn'):cssv('--ink3')}">${FUENTES[d.fuente].toLowerCase()}</text>
+      <text x="${NW-8}" y="17" font-size="9.5" text-anchor="end" fill="${d.fuente==='provision'||(d.fuente==='calibrado'&&WS.calibrado[a.id].n<3)?cssv('--warn'):cssv('--ink3')}">${FUENTES[d.fuente].toLowerCase()}${d.fuente==='calibrado'?' n='+WS.calibrado[a.id].n:''}</text>
       <text x="13" y="33" font-size="11.5" fill="${cssv('--ink')}">${esc(trunc(a.corto,16))}</text>
       <text x="13" y="${NH-10}" font-size="10" class="mono" fill="${cssv('--ink2')}">${nf(d.min)}·${nf(d.moda)}·${nf(d.max)} d</text>
       ${cr!=null?`<rect x="${NW-44}" y="${NH-19}" width="36" height="12" rx="3" fill="#0a1522"/><rect x="${NW-44}" y="${NH-19}" width="${36*cr}" height="12" rx="3" fill="${cssv('--crit')}" opacity="${.35+.65*cr}"/><text x="${NW-26}" y="${NH-10}" font-size="9" text-anchor="middle" class="mono" fill="#fff">${Math.round(cr*100)}%</text>`:''}
@@ -5528,6 +5594,81 @@ function correrMC(){
   vRed();
 }
 
+/* ---------- MODAL DE CALIBRACIÓN ---------- */
+function modalCalibrar(){
+  const ps=proyectos(); if(!ps.length){ toast('Primero carga al menos una Curva S.'); return; }
+  const sel = new Set((WS.calib&&WS.calib.proyectos||[]).map(n=>Object.keys(CACHE).find(k=>CACHE[k].P.proyecto===n)).filter(Boolean));
+  if(!sel.size) ps.forEach(p=>sel.add(p.key));
+  const excl=new Set();
+  abrirModal(`<h2>Calibrar distribuciones con Curvas S</h2>
+    <p class="sub">Usa las duraciones <b>reales</b> derivadas de los cortes (umbral de terminación ${WS.cfg.umbral} %) para ajustar la distribución de cada actividad estándar.</p>
+    <div class="steps">
+      <div class="step"><h4>Elige las Curvas S de la muestra</h4>
+        <div class="row" style="margin-bottom:8px"><button class="btn sm" id="cbAll">Todas</button><button class="btn sm ghost" id="cbNone">Ninguna</button></div>
+        <table class="t"><thead><tr><th></th><th>Proyecto</th><th>Último corte</th><th class="num">Act. terminadas</th><th class="num">Mapeo aprobado</th></tr></thead><tbody>${
+          ps.map(p=>{ const term=CATALOGO.filter(a=>p.agg[a.id]&&p.agg[a.id].dur!=null).length, en=CATALOGO.filter(a=>p.agg[a.id]&&p.agg[a.id].estado==='en curso').length;
+            const apr=p.P.tareas.filter(t=>p.mapeo[t.id]&&p.mapeo[t.id].e==='aprobado').length, pct=Math.round(100*apr/p.P.tareas.length);
+            return `<tr><td><input type="checkbox" class="cbP" value="${esc(p.key)}" ${sel.has(p.key)?'checked':''}></td><td><b>${esc(p.P.proyecto)}</b></td><td>${fmtD(p.D.fechaDatos)}</td>
+              <td class="num">${term}${en?` <span class="muted">(+${en} en curso)</span>`:''}</td><td class="num">${pct<100?`<span class="flag warn">▲ ${pct} %</span>`:'<span class="flag ok">✓ 100 %</span>'}</td></tr>`; }).join('')}</tbody></table></div>
+      <div class="step"><h4>Opciones</h4>
+        <div class="form-row"><label>Mezcla con el a priori</label><select id="cbPeso"><option value="0">No (solo datos)</option><option value="1">Peso = 1 proyecto</option><option value="2">Peso = 2 proyectos</option><option value="3">Peso = 3 proyectos</option></select></div>
+        <p class="muted" style="font-size:11.5px;margin:-4px 0 0">A priori = criterio experto si está importado; si no, la provisión del catálogo. La mezcla amortigua el efecto de un solo proyecto atípico.</p></div>
+      <div class="step"><h4>Revisa el resultado y aplica</h4><div id="cbWarn"></div><div id="cbPrev"></div></div>
+    </div>
+    <div class="row" style="margin-top:14px"><span class="muted" id="cbInfo"></span><span class="spacer"></span><button class="btn" data-close>Cancelar</button><button class="btn pri" id="cbGo">Aplicar calibración</button></div>`);
+  let res=[];
+  const upd=()=>{
+    const keys=$$('.cbP').filter(c=>c.checked).map(c=>c.value), peso=+$('#cbPeso').value;
+    res=CATALOGO.map(a=>calibrarActividad(a.id, keys, {peso}));
+    const con=res.filter(r=>r.n>0), nMax=Math.max(0,...con.map(r=>r.n)), nMin=con.length?Math.min(...con.map(r=>r.n)):0;
+    const peq = keys.length<3 || nMin<3;
+    $('#cbWarn').innerHTML = !keys.length ? `<div class="note">Selecciona al menos una Curva S.</div>` : (peq ? `
+      <div class="note" style="border:1px solid #6d2c2a;background:#2a1212;margin-bottom:10px">
+        <div class="flag crit" style="font-size:12.5px;margin-bottom:4px">● Muestra pequeña: ${keys.length} Curva${keys.length>1?'s':''} S${nMin<3&&con.length?` · ${con.filter(r=>r.n<3).length} actividades con n < 3`:''}</div>
+        Con menos de 3 proyectos por actividad, la calibración <b>solo re-centra</b> la distribución en el valor observado y conserva la dispersión del a priori.
+        Un proyecto atípico (atrasos excepcionales, alcance distinto, otro contratista) se trasladará completo al modelo, y los P50/P80 pueden ser <b>poco representativos</b>.
+        Úsalo como calibración preliminar, decláralo en el informe y recalibra al incorporar más Curvas S.
+        <label style="display:block;margin-top:8px;color:var(--ink)"><input type="checkbox" id="cbOk"> Entiendo la limitación y quiero aplicar la calibración preliminar</label></div>` : `<div class="note" style="margin-bottom:10px"><span class="flag ok">✓</span> Todas las actividades calibradas tienen n ≥ 3.</div>`);
+    $('#cbPrev').innerHTML=`<div class="tscroll" style="max-height:330px"><table class="t"><thead><tr><th></th><th>Actividad</th><th class="num">n</th><th>Observado (d)</th><th class="num">A priori</th><th class="num">Calibrado</th><th>Calidad / método</th></tr></thead><tbody>${
+      res.map(r=>{ const a=ACT[r.id], q=r.calidad, pr=r.apriori;
+        if(!r.n) return `<tr style="opacity:.55"><td></td><td><span class="code" style="color:${colorAct(r.id)}">${r.id}</span> ${esc(a.corto)}</td><td class="num">0</td><td class="muted" colspan="3">${r.muestra.cens.length?`${r.muestra.cens.length} en curso (≥ ${r.muestra.cens.map(c=>c.min).join(', ')} d) — sin terminadas`:'Sin datos en las curvas elegidas'}</td><td class="muted">Se mantiene la fuente actual</td></tr>`;
+        const ic=q.k==='crit'?'●':q.k==='warn'?'▲':q.k==='info'?'ℹ':'✓', bc=q.k==='crit'?'b-crit':q.k==='warn'?'b-sug':q.k==='info'?'b-info':'b-ok';
+        return `<tr><td><input type="checkbox" class="cbA" value="${r.id}" ${excl.has(r.id)?'':'checked'}></td><td><span class="code" style="color:${colorAct(r.id)}">${r.id}</span> ${esc(a.corto)}</td><td class="num">${r.n}</td>
+          <td style="font-size:11.5px" data-tip="${esc(r.muestra.proys.map((p,i)=>p+': '+r.muestra.durs[i]+' d').join('<br>'))}">${r.muestra.durs.join(', ')}${r.muestra.cens.length?` <span class="muted">+${r.muestra.cens.length} en curso</span>`:''}</td>
+          <td class="num ink2" data-tip="${FUENTES[pr.fuente]}">${nf(pr.min)}·${nf(pr.moda)}·${nf(pr.max)}</td>
+          <td class="num"><b>${r.dist.min}·${r.dist.moda}·${r.dist.max}</b></td>
+          <td style="font-size:11.5px"><span class="badge ${bc}">${ic} ${q.t}</span> <span class="muted">${esc(r.metodo)}</span>${r.avisos.length?`<div class="flag warn" style="font-weight:400">${r.avisos.map(esc).join(' · ')}</div>`:''}</td></tr>`; }).join('')}</tbody></table></div>`;
+    const soloCens=res.filter(r=>!r.n && r.muestra.cens.length);
+    if(soloCens.length && WS.cfg.umbral>95) $('#cbWarn').insertAdjacentHTML('beforeend',`<div class="note" style="margin-bottom:10px"><span class="flag warn">▲</span> ${soloCens.length} actividad${soloCens.length>1?'es':''} (${soloCens.map(r=>r.id).join(', ')}) solo tiene${soloCens.length>1?'n':''} tareas en curso y quedan fuera. Muchas tareas se quedan en 95–99 %: con umbral de terminación de 95 % (⚙ Configuración) entrarían a la muestra, declarándolo como supuesto.</div>`);
+    $('#cbInfo').textContent = keys.length ? `${con.length} actividades con datos · n máx ${nMax}` : '';
+    const sync=()=>{ $('#cbGo').disabled = !keys.length || !con.length || (peq && !($('#cbOk')&&$('#cbOk').checked)); };
+    if($('#cbOk')) $('#cbOk').onchange=sync;
+    $$('.cbA').forEach(c=>c.onchange=()=>{ c.checked?excl.delete(c.value):excl.add(c.value); });
+    sync();
+  };
+  $$('.cbP').forEach(c=>c.onchange=upd); $('#cbPeso').onchange=upd;
+  $('#cbAll').onclick=()=>{ $$('.cbP').forEach(c=>c.checked=true); upd(); };
+  $('#cbNone').onclick=()=>{ $$('.cbP').forEach(c=>c.checked=false); upd(); };
+  $('#cbGo').onclick=()=>{
+    const keys=$$('.cbP').filter(c=>c.checked).map(c=>c.value), peso=+$('#cbPeso').value;
+    const ok=res.filter(r=>r.n>0 && !excl.has(r.id)); if(!ok.length){ toast('No hay actividades para calibrar.'); return; }
+    WS.calibrado={};
+    Object.keys(WS.fuente).forEach(id=>{ if(WS.fuente[id]==='calibrado') delete WS.fuente[id]; });
+    for(const r of ok){ WS.calibrado[r.id]={...r.dist, n:r.n, proys:r.muestra.proys, durs:r.muestra.durs, metodo:r.metodo, apriori:r.apriori.fuente, avisos:r.avisos};
+      WS.fuente[r.id]='calibrado'; }
+    WS.calib={fecha:hoyLocal()+new Date().toTimeString().slice(0,8).replace(/^/,'T'), proyectos:keys.map(k=>CACHE[k].P.proyecto), umbral:WS.cfg.umbral, peso,
+      actividades:ok.map(r=>r.id), nMin:Math.min(...ok.map(r=>r.n))};
+    MC=null; MCesc=null; PRON=null; cerrarModal(); refrescar();
+    toast(`${ok.length} actividades calibradas con ${keys.length} Curva${keys.length>1?'s':''} S${WS.calib.nMin<3?' · muestra pequeña: resultados preliminares':''}.`);
+  };
+  upd();
+}
+function deshacerCalibracion(){
+  if(!confirm('¿Quitar la calibración? Las actividades vuelven a la fuente automática.')) return;
+  Object.keys(WS.fuente).forEach(id=>{ if(WS.fuente[id]==='calibrado') delete WS.fuente[id]; });
+  WS.calibrado={}; WS.calib=null; MC=null; MCesc=null; PRON=null; refrescar(); toast('Calibración eliminada.');
+}
+
 /* ---------- PRONÓSTICO ---------- */
 let PRONCUT={};   // índice de corte elegido por proyecto (prueba retrospectiva)
 function vPron(){
@@ -5559,6 +5700,8 @@ function vPron(){
       return `<tr><td><span class="code" style="color:${colorAct(a.id)}">${a.id}</span> ${esc(a.corto)}</td><td>${e}</td><td style="font-size:11.5px">${g.ini!=null?fmtDs(g.ini)+' → '+(g.fin!=null?fmtDs(g.fin)+` (${g.dur} d)`:'…'):'—'}</td>
       <td class="num">${R&&R.act[a.id]?fmtDs(Math.round(R.act[a.id].p50)):'—'}</td><td class="num">${R&&R.act[a.id]?fmtDs(Math.round(R.act[a.id].p80)):'—'}</td>
       ${p.recorte?`<td class="num">${gf&&gf.fin!=null?fmtDs(gf.fin):'<span class="muted">abierta</span>'}</td>`:''}</tr>`; }).join('')}</tbody></table>
+    ${(()=>{ const C=WS.calib; if(!C||!C.proyectos.includes(full.P.proyecto)) return ''; const usa=CATALOGO.filter(a=>p.agg[a.id]&&p.agg[a.id].n&&distDe(a.id).fuente==='calibrado').map(a=>a.id);
+      return usa.length?`<div class="note" style="margin-top:10px;border:1px solid #6b5320"><span class="flag warn">▲ Pronóstico no independiente:</span> ${esc(full.P.proyecto)} forma parte de la muestra de calibración y ${usa.join(', ')} usan distribuciones calibradas con sus propios datos. Para una prueba retrospectiva válida, recalibra excluyendo este proyecto.</div>`:''; })()}
     <p class="note" style="margin-top:10px">A1–A5 no figuran en la Curva S (ocurren antes de la construcción): el pronóstico cubre la subred presente en el TXT. Las duraciones pendientes usan la fuente declarada en Distribuciones.${p.recorte?' <b>Prueba retrospectiva:</b> si las distribuciones «observadas» incluyen este mismo proyecto, la prueba no es independiente; úsala con provisión/experto o con proyectos distintos.':''}</p>`;
 }
 function correrPron(){
@@ -5655,10 +5798,12 @@ $('#btnMapDown').onclick=()=>{ const p=proyActual(); if(!p) return; descargar(`m
 $('#btnMapUp').onclick=()=>$('#fileMap').click();
 $('#fileMap').onchange=e=>{ cargarArchivos([...e.target.files]); e.target.value=''; };
 $('#btnExpUp').onclick=()=>$('#fileExp').click();
+$('#btnCalib').onclick=modalCalibrar;
+document.addEventListener('click',e=>{ if(e.target.closest('#btnCalib2')) modalCalibrar(); if(e.target.closest('#btnCalibUndo')) deshacerCalibracion(); });
 $('#fileExp').onchange=async e=>{ const f=e.target.files[0]; if(!f) return; try{ const k=importarExperto(JSON.parse(await f.text())); MC=null; refrescar(); toast(`${k} distribuciones de criterio experto importadas.`); }catch(err){ toast('Error: '+err.message); } e.target.value=''; };
 $('#btnCatDown').onclick=()=>descargar(`catalogo_v${CATALOGO_VERSION}.json`,{esquema:'gp-catalogo/1', version:CATALOGO_VERSION, exportado:new Date().toISOString(),
   actividades:CATALOGO.map(a=>{ const d=distDe(a.id); return {codigo:a.id, actividad:a.n, fase:FASES[a.f].n, predecesoras:a.pred, descripcion:a.d, distribucion:{tipo:'triangular', min:d.min, moda:d.moda, max:d.max, fuente:d.fuente}, observado:OBS[a.id].durs}; }),
-  especiales:ESPECIALES});
+  especiales:ESPECIALES, calibracion:WS.calib});
 $('#btnMC').onclick=correrMC;
 $('#mcStart').onchange=()=>pintarMC();
 $('#scSel').onchange=e=>{ WS.ui.esc=+e.target.value; guardar(); if(MC) correrMC(); else vRed(); };
