@@ -9,7 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <!--
   =============================================================================
-   GEMELO DE PROCESO · Desarrollo de subestaciones (ICE)            versión 2.1
+   GEMELO DE PROCESO · Desarrollo de subestaciones (ICE)            versión 2.4.1
   -----------------------------------------------------------------------------
    Prototipo del Capítulo 6 (Objetivo 3). Archivo único, sin servidor.
 
@@ -209,6 +209,17 @@ textarea{width:100%;min-height:150px;font-family:'IBM Plex Mono',monospace;font-
 .flag{font-size:11px;font-weight:600}
 .flag.ok{color:var(--ok)} .flag.warn{color:var(--warn)} .flag.crit{color:var(--crit)}
 .spark{vertical-align:middle}
+.view.claro{background:#ffffff;color:#1b2430;--panel:#ffffff;--panel2:#f4f6f9;--bg2:#f4f6f9;--line:#dde3ea;--line2:#c9d1db;--ink:#1b2430;--ink2:#46525f;--ink3:#6a7685;--hover:#eef3f9}
+.view.claro .card,.view.claro .kpi{box-shadow:none}
+.view.claro .kpi.hl{background:#eef4fb;border-color:#b9cde6}
+.view.claro select,.view.claro input{background:#fff;color:#1b2430}
+.view.claro .chip{background:#f4f6f9;color:#46525f}.view.claro .chip.on{background:#dbe8f7;border-color:#7da7d9;color:#11253d}
+.view.claro .note{background:#f6f8fb}
+.view.claro .b-ok{background:#e6f4ea;color:#1e6b35;border-color:#9fd3ae}.view.claro .b-info{background:#e8f0fb;color:#1f4f8f;border-color:#a9c4e8}.view.claro .b-crit{background:#fbe9e8;color:#9b2a25;border-color:#e6aaa6}.view.claro .b-sug{background:#fdf3dd;color:#7a5410;border-color:#e6c77f}.view.claro .flag.crit{color:#b3261e}.view.claro .flag.ok{color:#1e7b3c}.view.claro .flag.warn{color:#8a5a00}
+.view.claro table.t tr:hover td{background:#f2f6fb}
+.view.claro .btn{background:#f4f6f9;color:#1b2430;border-color:#c9d1db}.view.claro .btn.pri{background:#256abf;color:#fff}
+.pc{display:inline-block;min-width:44px;text-align:center;border-radius:5px;padding:2px 4px;font-family:'IBM Plex Mono',monospace;font-size:11.5px}
+#giFig svg text,.figinf svg text{font-family:'Times New Roman','DejaVu Serif',Georgia,serif}
 @media (max-width:860px){nav.rail{width:60px}nav.rail button span.lbl,nav.rail h4,nav.rail .num,.railfoot{display:none}header .hide-s{display:none}}
 </style>
 </head>
@@ -242,6 +253,7 @@ textarea{width:100%;min-height:150px;font-family:'IBM Plex Mono',monospace;font-
     <button data-v="dist"><span class="ic">◭</span><span class="lbl">Distribuciones</span></button>
     <button data-v="red"><span class="ic">⌬</span><span class="lbl">Red y Monte Carlo</span></button>
     <button data-v="pron"><span class="ic">◷</span><span class="lbl">Pronóstico</span></button>
+    <button data-v="valmod"><span class="ic">✓</span><span class="lbl">Validación del modelo</span></button>
     <div class="railfoot" id="railFoot"></div>
   </nav>
 
@@ -315,7 +327,7 @@ textarea{width:100%;min-height:150px;font-family:'IBM Plex Mono',monospace;font-
     <section class="view" id="v-dist">
       <div class="vhead">
         <div><h2>Distribuciones de duración</h2>
-        <p>Cada actividad estándar toma su distribución de una fuente declarada. En modo <b>automático</b> la prioridad es: criterio experto (cuestionario) → calibrado con Curvas S → observado en cartera (n ≥ 3) → provisión.</p></div>
+        <p>Cada actividad estándar toma su distribución de una fuente declarada. Por defecto se usa la <b>base</b> de la Tabla 38 (cuestionario para A1–A13; preliminar para A14–A15). En modo <b>automático</b> la prioridad es: experto importado → calibrado con Curvas S → observado en cartera (n ≥ 3) → base.</p></div>
         <div class="tools">
           <button class="btn pri" id="btnCalib">⚙ Calibrar con Curvas S</button>
           <button class="btn" id="btnExpUp">⇧ Importar distribuciones_calibradas.json</button>
@@ -332,7 +344,8 @@ textarea{width:100%;min-height:150px;font-family:'IBM Plex Mono',monospace;font-
     <section class="view" id="v-red">
       <div class="vhead">
         <div><h2>Red estándar y simulación de Monte Carlo</h2>
-        <p>14 actividades con precedencias estándar. Cada iteración muestrea todas las duraciones, recalcula la ruta crítica y registra la duración total.</p></div>
+        <p>15 actividades con precedencias estándar (capítulo 6, Tabla 38). Cada iteración muestrea todas las duraciones, recalcula la ruta crítica y registra la duración total.</p></div>
+        <div class="tools"><button class="btn" id="btnInforme" title="Histograma con probabilidad acumulada, listo para el informe">⎙ Gráfico para informe</button></div>
       </div>
       <div class="netwrap" id="netWrap" style="margin-bottom:14px"></div>
       <div class="grid g-side">
@@ -351,8 +364,8 @@ textarea{width:100%;min-height:150px;font-family:'IBM Plex Mono',monospace;font-
           <div class="card">
             <h3>Parámetros de la simulación</h3>
             <p class="sub">Semilla fija = resultados reproducibles para el informe.</p>
-            <div class="form-row"><label>Iteraciones</label><input type="number" id="mcN" value="5000" min="500" max="50000" step="500"></div>
-            <div class="form-row"><label>Semilla</label><input type="number" id="mcSeed" value="20261127"></div>
+            <div class="form-row"><label>Iteraciones</label><input type="number" id="mcN" value="20000" min="500" max="50000" step="500"></div>
+            <div class="form-row"><label>Semilla</label><input type="number" id="mcSeed" value="20260930"></div>
             <div class="form-row"><label>Distribución</label><select id="mcTipo"><option value="triangular">Triangular</option><option value="pert">Beta-PERT (λ = 4)</option></select></div>
             <div class="form-row"><label>Inicio (A1)</label><input type="date" id="mcStart"></div>
             <div class="row"><button class="btn pri" id="btnMC">▶ Simular</button><span class="muted" id="mcTime"></span></div>
@@ -381,6 +394,43 @@ textarea{width:100%;min-height:150px;font-family:'IBM Plex Mono',monospace;font-
       <div class="grid g2">
         <div class="card"><h3>Fecha de terminación pronosticada</h3><p class="sub" id="pronSub"></p><div id="pronCdf"></div></div>
         <div class="card"><h3>Estado por actividad estándar</h3><p class="sub">Según la fecha de datos elegida. En prueba retrospectiva se añade el fin que realmente ocurrió.</p><div id="pronTable"></div></div>
+      </div>
+    </section>
+    <!-- ======================= VALIDACIÓN DEL MODELO ======================= -->
+    <section class="view" id="v-valmod">
+      <div class="vhead">
+        <div><h2>Validación del modelo con Curvas S</h2>
+        <p>Contraste del modelo con lo ocurrido en obra, <b>actividad por actividad</b>: las Curvas S no necesitan estar completas. La referencia por defecto es la base de la Tabla 38 (cuestionario), independiente de las curvas: es una prueba fuera de la muestra.</p></div>
+        <div class="tools"><button class="btn" id="vmClaro" title="Fondo claro para capturas de pantalla">◐ Vista clara para captura</button></div>
+      </div>
+      <div class="card" style="margin-bottom:14px">
+        <div class="grid g3" style="gap:16px">
+          <div><h3>Curvas S incluidas</h3><p class="sub">Clic para incluir o excluir.</p><div class="chips" id="vmProys"></div></div>
+          <div><h3>Definición de duración real</h3><p class="sub" id="vmDefTxt"></p>
+            <select id="vmDef" style="width:100%"><option value="lapso">Lapso calendario: primer avance → cierre</option><option value="efectiva">Efectiva: (t90 − t10) / 0,8 de la curva de la actividad</option></select></div>
+          <div><h3>Distribución de referencia</h3><p class="sub">Contra qué se compara lo observado.</p>
+            <select id="vmRef" style="width:100%"><option value="base">Base · Tabla 38 (recomendado)</option><option value="experto">Experto importado (si existe; si no, base)</option><option value="uso">Fuente en uso en Distribuciones</option></select>
+            <div id="vmRefWarn"></div></div>
+        </div>
+      </div>
+      <div class="kpis" id="vmKpis"></div>
+      <div class="card" style="margin-bottom:14px">
+        <div class="row"><h3 style="margin:0">Prueba 1 · Cobertura de las distribuciones</h3><span class="spacer"></span>
+          <button class="btn sm" id="vmF1">⎙ Figura</button><button class="btn sm" id="vmF2">⎙ Histograma de percentiles</button><button class="btn sm ghost" id="vmT1">⧉ Copiar tabla</button></div>
+        <p class="sub">Percentil de cada duración observada dentro de la distribución de referencia. Si el modelo está calibrado, ≈ 80 % cae entre P10 y P90 y los percentiles se reparten de forma uniforme. ▸ = actividad en curso (límite inferior).</p>
+        <div class="grid" style="grid-template-columns:minmax(0,3fr) minmax(0,2fr);align-items:start"><div id="vmFig1" class="figinf" style="background:#fff;border-radius:8px;padding:6px"></div><div id="vmFig2" class="figinf" style="background:#fff;border-radius:8px;padding:6px"></div></div>
+        <div id="vmTab1" style="margin-top:12px;overflow-x:auto"></div>
+      </div>
+      <div class="card" style="margin-bottom:14px">
+        <div class="row"><h3 style="margin:0">Prueba 2 · Pronóstico retrospectivo</h3><span class="spacer"></span>
+          <select id="vmRP"></select><select id="vmRC"></select><button class="btn sm pri" id="vmRGo">▶ Ejecutar</button><button class="btn sm" id="vmF3">⎙ Figura</button><button class="btn sm ghost" id="vmT2">⧉ Copiar tabla</button></div>
+        <p class="sub">Se recorta la Curva S a una fecha de corte anterior, se pronostica con la distribución de referencia y se compara el fin real de cada actividad que terminó después del corte con la distribución pronosticada.</p>
+        <div id="vmRetro"><div class="empty">Elige proyecto y fecha de corte, y pulsa «Ejecutar».</div></div>
+      </div>
+      <div class="card">
+        <div class="row"><h3 style="margin:0">Prueba 3 · Lógica de la red</h3><span class="spacer"></span><button class="btn sm ghost" id="vmT3">⧉ Copiar tabla</button></div>
+        <p class="sub">Para cada precedencia estándar P → S con fechas reales: <b>respetada</b> (S inicia después de que P termina), <b>solape</b> (S inicia antes, termina después: avance en paralelo) o <b>inversión</b> (S termina antes que P: la secuencia real contradice la red).</p>
+        <div id="vmLog"></div>
       </div>
     </section>
   </main>
@@ -4591,17 +4641,22 @@ FF:2026-08-30
 <script>
 "use strict";
 /* =============================================================================
-   §1  CATÁLOGO DE ACTIVIDADES ESTÁNDAR  (red normalizada, versión 1.1)
+   §1  CATÁLOGO DE ACTIVIDADES ESTÁNDAR  (red normalizada de 15 actividades, v1.2)
    -----------------------------------------------------------------------------
-   · Los códigos A1–A13 coinciden con la Sección B del cuestionario a supervisores.
-   · A14 (edificio de control) se agrega SIN renumerar: los códigos son
-     identificadores, no posiciones. El orden de presentación sí lo ubica en
-     obra civil, junto a A7 y A8.
-   · pred = precedencias estándar (fin-inicio) de la red de 14 actividades.
-   · prov = distribución PROVISIONAL (días) hasta tener criterio experto u
-     observaciones suficientes. Se declara como tal en toda la interfaz.
+   · Coincide con el capítulo 6 del informe (sección 6.6.1 y Tabla 38).
+   · A1–A13: Sección B del cuestionario a supervisores.
+   · A14 y A15: extensión al alcance complementario (edificio de control y obra
+     complementaria; servicios propios y canalizaciones de control). Se agregan
+     SIN renumerar: los códigos son identificadores, no posiciones.
+   · pred = precedencias fin-inicio. Reproducen la iteración de la Tabla 38
+     (T = 393,7 d): A3 arranca en el día 0 en paralelo con la ingeniería;
+     A6 espera la llegada de equipo y estructuras; A9 espera fundaciones y
+     recepción; A11 espera canalizaciones, montaje de equipo y A15.
+   · base = distribución triangular por defecto (mín, moda, máx, en días),
+     tomada de la Tabla 38: criterio experto agregado del cuestionario para
+     A1–A13 y valores PRELIMINARES por analogía para A14–A15 (prel:true).
    ============================================================================= */
-const CATALOGO_VERSION = '1.1';
+const CATALOGO_VERSION = '1.2';
 const FASES = {
   ING:{n:'Ingeniería',        c:'--f1'},
   TRA:{n:'Tramitación',       c:'--f2'},
@@ -4612,33 +4667,35 @@ const FASES = {
   ENE:{n:'Energización',      c:'--f7'},
 };
 const CATALOGO = [
-  {id:'A1', n:'Ingeniería de detalle', corto:'Ingeniería', f:'ING', pred:[], prov:[30,45,75],
+  {id:'A1', n:'Ingeniería de detalle', corto:'Ingeniería', f:'ING', pred:[], prov:[45,68,90],
    d:'Diseño electromecánico y civil del módulo: planos constructivos, memorias de cálculo, listas de materiales.'},
-  {id:'A2', n:'Revisión y aprobación ICE', corto:'Aprobación ICE', f:'ING', pred:['A1'], prov:[10,20,40],
+  {id:'A2', n:'Revisión y aprobación ICE', corto:'Aprobación ICE', f:'ING', pred:['A1'], prov:[13,18,25],
    d:'Revisión institucional de la ingeniería y documentos del contratista hasta su aprobación.'},
-  {id:'A3', n:'Trámites y permisos externos', corto:'Permisos', f:'TRA', pred:['A2'], prov:[30,60,120],
+  {id:'A3', n:'Trámites y permisos externos', corto:'Permisos', f:'TRA', pred:[], prov:[90,120,180],
    d:'Permisos municipales, viabilidad ambiental (SETENA), servidumbres y otros trámites externos.'},
-  {id:'A4', n:'Fabricación y entrega de equipo de patio', corto:'Equipo patio', f:'SUM', pred:['A2'], prov:[120,180,270],
+  {id:'A4', n:'Fabricación y entrega de equipo de patio', corto:'Equipo patio', f:'SUM', pred:['A2'], prov:[165,200,300],
    d:'Interruptores, seccionadores, TC/TP, pararrayos, transformadores: fabricación, pruebas FAT y embarque.'},
-  {id:'A5', n:'Fabricación y entrega de estructuras', corto:'Estructuras (fab.)', f:'SUM', pred:['A2'], prov:[60,90,150],
+  {id:'A5', n:'Fabricación y entrega de estructuras', corto:'Estructuras (fab.)', f:'SUM', pred:['A2'], prov:[75,120,200],
    d:'Estructuras metálicas, galvanizado y pernería, hasta su entrega en sitio.'},
-  {id:'A6', n:'Transporte y recepción', corto:'Recepción', f:'SUM', pred:['A4'], prov:[3,7,15],
-   d:'Transporte a sitio, descarga e inspección de recepción del equipo por parte del ICE.'},
-  {id:'A7', n:'Movimiento de tierras y fundaciones', corto:'Fundaciones', f:'CIV', pred:['A3'], prov:[45,60,90],
+  {id:'A6', n:'Transporte y recepción', corto:'Recepción', f:'SUM', pred:['A4','A5'], prov:[10,15,30],
+   d:'Transporte a sitio, descarga e inspección de recepción del equipo y las estructuras por parte del ICE.'},
+  {id:'A7', n:'Movimiento de tierras y fundaciones', corto:'Fundaciones', f:'CIV', pred:['A3'], prov:[45,68,90],
    d:'Excavación, concreto de sello, acero y formaleta, colado de placas y pedestales, pernos de anclaje, retículas, rellenos y liberación de cimientos.'},
-  {id:'A8', n:'Malla de tierra y canalizaciones', corto:'Canalizaciones', f:'CIV', pred:['A7'], prov:[10,15,30],
-   d:'Malla de puesta a tierra, ductos, tuberías, trincheras, cajas de registro y sus rellenos.'},
-  {id:'A14', n:'Edificio de control (shelter)', corto:'Edificio control', f:'CIV', pred:['A3'], prov:[20,30,50],
-   d:'Excavación, cimentación, instalación o construcción del edificio de control/caseta de protecciones, acabados y sistemas eléctricos propios del edificio (iluminación, tomas, climatización). Excluye tableros de PCyM y su cableado (A11).'},
-  {id:'A9', n:'Montaje de estructuras', corto:'Estructuras', f:'MON', pred:['A7','A5'], prov:[7,12,20],
+  {id:'A8', n:'Malla de tierra y canalizaciones', corto:'Canalizaciones', f:'CIV', pred:['A7'], prov:[20,30,45],
+   d:'Malla de puesta a tierra, ductos, tuberías, trincheras, cajas de registro y sus rellenos en el patio.'},
+  {id:'A14', n:'Edificio de control y obra complementaria', corto:'Edificio control', f:'CIV', pred:['A3'], prov:[60,90,150], prel:true,
+   d:'Excavación, cimentación, instalación o construcción del edificio de control/caseta de protecciones y sus acabados; obra complementaria de sitio (drenajes, accesos, cerramiento).'},
+  {id:'A9', n:'Montaje de estructuras', corto:'Estructuras', f:'MON', pred:['A7','A6'], prov:[5,8,15],
    d:'Montaje de columnas, vigas, pórticos y soportes de equipo.'},
-  {id:'A10', n:'Montaje de equipo y conexión de barras', corto:'Montaje equipo', f:'MON', pred:['A9','A6'], prov:[10,15,25],
+  {id:'A10', n:'Montaje de equipo y conexión de barras', corto:'Montaje equipo', f:'MON', pred:['A9'], prov:[13,20,30],
    d:'Montaje de polos, aterrizamiento de estructuras y equipos, ajuste/calibración mecánica, cadenas de aisladores, conductores de barra e interconexión entre equipos.'},
-  {id:'A11', n:'Cableado de control y fuerza', corto:'Cableado', f:'CTL', pred:['A8','A10','A14'], prov:[15,20,35],
+  {id:'A15', n:'Servicios propios y canalizaciones de control', corto:'Serv. propios', f:'CTL', pred:['A14'], prov:[20,30,45], prel:true,
+   d:'Sistemas eléctricos del edificio, servicios propios CA/CC (tableros de servicios auxiliares, baterías, cargadores), canastas, bandejas y canalizaciones de control.'},
+  {id:'A11', n:'Cableado de control y fuerza', corto:'Cableado', f:'CTL', pred:['A8','A10','A15'], prov:[15,20,30],
    d:'Cajas intermedias, instalación de tableros de PCyM y DOCSE, tendido, fijado y conexionado de cables de control y fuerza.'},
-  {id:'A12', n:'Pruebas y comisionamiento (PCyM)', corto:'Pruebas', f:'CTL', pred:['A11'], prov:[15,25,45],
+  {id:'A12', n:'Pruebas y comisionamiento (PCyM)', corto:'Pruebas', f:'CTL', pred:['A11'], prov:[15,20,30],
    d:'Timbrado, verificaciones físicas, pruebas de puesta a tierra, pruebas eléctricas a equipos, PCyM niveles 0–2, telemetría y protocolos de puesta en operación.'},
-  {id:'A13', n:'Gestión de la indisponibilidad y energización', corto:'Energización', f:'ENE', pred:['A12'], prov:[5,10,30],
+  {id:'A13', n:'Gestión de la indisponibilidad y energización', corto:'Energización', f:'ENE', pred:['A12'], prov:[10,15,20],
    d:'Solicitud y ejecución de la indisponibilidad, conexión del módulo a la barra existente y energización.'},
 ];
 /* Códigos especiales (no son actividades de la red) */
@@ -4686,7 +4743,7 @@ function rng(seed){ let a=seed>>>0; return function(){ a|=0; a=a+0x6D2B79F5|0; l
 function parseCurvaS(text){
   const L = text.replace(/^﻿/,'').split(/\r?\n/);
   const P = {proyecto:'', FI:'', FF:'', cortes:[], tareas:[], avisos:[]};
-  const reAct=/^<<(.+)>>\((\d+)\)\((\d{4}-\d{2}-\d{2})\)\((\d{4}-\d{2}-\d{2})\)\(([\d,\s]*)\)\s*$/;
+  const reAct=/^<<(.+)>>\(([^()]*)\)\((\d{4}-\d{2}-\d{2})\)\((\d{4}-\d{2}-\d{2})\)\(([\d,.\s]*)\)\s*$/;
   const reG=/^<([^<].*)>\s*$/, reP=/^\((\d+(?:[.,]\d+)?)%\)\s*$/, reC=/^#(\d{4}-\d{2}-\d{2})#\s*$/;
   let grupo='', cur=null; const vistos=new Set();
   for(let i=0;i<L.length;i++){
@@ -4699,6 +4756,7 @@ function parseCurvaS(text){
     if((m=s.match(reAct))){
       cur={id:m[2], nombre:m[1].trim(), grupo, fi:m[3], ff:m[4],
            pred:m[5].split(',').map(x=>x.trim()).filter(Boolean), serie:[]};
+      if(!/^\d+$/.test(cur.id)) P.avisos.push({tipo:'id_invalido', id:cur.id||'(vacío)', msg:`ID «${cur.id}» no es un entero: se conserva tal cual para el mapeo`});
       if(vistos.has(cur.id)) P.avisos.push({tipo:'id_duplicado', id:cur.id, msg:'ID repetido en el archivo'});
       vistos.add(cur.id); P.tareas.push(cur); continue;
     }
@@ -4719,31 +4777,42 @@ function parseCurvaS(text){
      fin real    = punto medio entre el corte previo y el primer corte con avance ≥ umbral
    El dato es "censurado por intervalo": el hecho ocurrió entre dos cortes.
    Una tarea sin fin real está EN CURSO: su duración es solo un límite inferior.
+
+   UMBRAL DE CIERRE POR TAREA (opcional): cuando una tarea queda abierta por
+   pendientes menores (p. ej. 98 % durante semanas), el supervisor puede fijar
+   para ESA tarea un umbral menor a 100 %, con justificación. El TXT no se toca:
+   el umbral se guarda aparte (WS.proyectos[k].cierres) y se reporta en Validación.
+   Umbral efectivo = umbral de la tarea si existe; si no, el umbral global.
    ============================================================================= */
-function derivarProyecto(P, umbral){
+function indiceCierre(serie, u){ let acc=0; for(let i=0;i<serie.length;i++){ acc=Math.max(acc,serie[i]); if(acc>=u) return i; } return -1; }
+function derivarProyecto(P, umbral, cierres={}){
   const C = P.cortes.map(toDay);
   const fechaDatos = C.length? C[C.length-1] : toDay(P.FF||P.FI);
   const mid = i => i<=0 ? C[0] : Math.floor((C[i-1]+C[i])/2);
   const byId = {}; P.tareas.forEach(t=>byId[t.id]=t);
   const anom = [...P.avisos];
   for(const t of P.tareas){
+    // Serie más larga que los cortes: se usan solo los primeros C.length valores
+    // (los sobrantes no tienen fecha asociada); el TXT no se modifica y se reporta.
+    t.nSerie=t.serie.length; if(t.serie.length>C.length) t.serie=t.serie.slice(0,C.length);
     const s=t.serie; let acc=0, iI=-1, iF=-1; const retro=[];
+    const cm=cierres[t.id], uT = cm ? cm.u : umbral;
     for(let i=0;i<s.length;i++){
       if(i>0 && s[i] < s[i-1]) retro.push({corte:P.cortes[i], de:s[i-1], a:s[i]});
       acc=Math.max(acc,s[i]);
       if(iI<0 && acc>0) iI=i;
-      if(iF<0 && acc>=umbral) iF=i;
+      if(iF<0 && acc>=uT) iF=i;
     }
     t.dFi=toDay(t.fi); t.dFf=toDay(t.ff); t.durPlan=Math.max(t.dFf-t.dFi,0);
     t.ini = iI>=0 ? mid(iI) : null;
     t.fin = iF>=0 ? Math.max(mid(iF), t.ini) : null;
     t.estado = t.fin!=null ? 'terminada' : (t.ini!=null ? 'en curso' : 'no iniciada');
     t.avance = s.length ? s[s.length-1] : 0;
-    t.avanceMax = acc;
+    t.avanceMax = acc; t.umbral = uT; t.cierreManual = !!cm;
     t.durReal = t.fin!=null ? Math.max(t.fin-t.ini,1) : null;
     t.durMin  = t.ini!=null && t.fin==null ? Math.max(fechaDatos-t.ini,1) : null;
     /* ---- anomalías (se reportan, no se corrigen) ---- */
-    if(s.length!==C.length) anom.push({tipo:'serie', id:t.id, msg:`La serie tiene ${s.length} valores y hay ${C.length} cortes`});
+    if(t.nSerie!==C.length) anom.push({tipo:'serie', id:t.id, msg:t.nSerie>C.length?`La serie tiene ${t.nSerie} valores y hay ${C.length} cortes: se usan los primeros ${C.length}`:`La serie tiene ${t.nSerie} valores y hay ${C.length} cortes: los últimos cortes quedan sin dato`});
     if(t.dFf<t.dFi) anom.push({tipo:'fechas_invertidas', id:t.id, msg:`Fin planificado (${fmtD(t.ff)}) anterior al inicio (${fmtD(t.fi)})`});
     if(!t.pred.length) anom.push({tipo:'sin_pred', id:t.id, msg:'Sin predecesora declarada'});
     for(const p of t.pred){
@@ -4753,7 +4822,8 @@ function derivarProyecto(P, umbral){
       if(gap>2) anom.push({tipo:'fecha_pred', id:t.id, msg:`Inicia (${fmtD(t.fi)}) ${gap} d antes de que termine su predecesora #${p} (${fmtD(q.ff)})`});
     }
     if(retro.length) anom.push({tipo:'retroceso', id:t.id, msg:'Avance disminuye: '+retro.map(r=>`${r.de}→${r.a} % (${fmtDs(r.corte)})`).join(', ')});
-    if(t.fin==null && acc>=90 && acc<100){
+    if(cm) anom.push({tipo:'cierre_manual', id:t.id, msg:`Cierre definido en ${cm.u} %${cm.nota?' — '+cm.nota:''} · ${t.fin!=null?'cerrada '+fmtD(t.fin)+' ('+t.durReal+' d)':'aún no alcanza ese avance'}`});
+    if(!cm && t.fin==null && acc>=90 && acc<100){
       let k=0; for(let i=s.length-1;i>=0 && s[i]>=90;i--) k++;
       if(k>=3) anom.push({tipo:'no_cierra', id:t.id, msg:`Se mantiene en ${acc} % durante ${k} cortes sin llegar a 100 %`});
     }
@@ -4765,10 +4835,12 @@ const TIPOS_ANOM = {
   fecha_pred:      {n:'Fecha incoherente con la predecesora', sev:'crit', exp:'La fecha planificada contradice la dependencia declarada (dependencia invertida o fecha mal digitada).'},
   fechas_invertidas:{n:'Fechas planificadas invertidas', sev:'crit', exp:'Fin anterior al inicio.'},
   serie:           {n:'Serie de avance incompleta', sev:'crit', exp:'El número de porcentajes no coincide con el número de cortes.'},
+  id_invalido:     {n:'ID de tarea no entero', sev:'crit', exp:'El cronograma exportó un ID no válido (p. ej. «0.0»). Se conserva para el mapeo, pero las predecesoras no pueden apuntarle.'},
   id_duplicado:    {n:'ID duplicado', sev:'crit', exp:'Dos tareas comparten ID; el mapeo no puede distinguirlas.'},
   retroceso:       {n:'Retroceso de avance', sev:'warn', exp:'Un corte reporta menos avance que el anterior. Se conserva el dato; la derivación usa el máximo acumulado.'},
   no_cierra:       {n:'Tarea que no cierra', sev:'warn', exp:'Queda en 90–99 % varios cortes. Determina el umbral de terminación y genera datos censurados.'},
   sin_pred:        {n:'Sin predecesora', sev:'info', exp:'Tarea suelta en la red del contratista. Informativo.'},
+  cierre_manual:   {n:'Cierre por tarea definido', sev:'info', exp:'Tareas con umbral de cierre propio (< 100 %) por pendientes menores. No modifica el TXT; debe declararse en el informe.'},
 };
 
 /* =============================================================================
@@ -4791,6 +4863,8 @@ const REGLAS = [
   // prioridad 2: términos inequívocos en el nombre
   {c:'A13', en:'nombre', re:/indisponib|energiza|conexion del modulo a la barra/, f:.9, j:'Indisponibilidad / energización'},
   {c:'A12', en:'nombre', re:/prueba|timbrado|verificac|protocolo|comisionamiento|puesta en (servicio|operacion)/, f:.9, j:'Pruebas, verificaciones o protocolos'},
+  {c:'A15', en:'nombre', re:/servicios? (propios|auxiliares)|sistemas? electricos? (del )?(shel+ter|edificio|caseta)|canasta|bandeja|banco de baterias|baterias|cargador|ca\/cc|canalizaciones? de control/, f:.85, j:'Servicios propios o canalizaciones de control'},
+  {c:'A14', en:'nombre', re:/drenaj|obras? de sitio|cerramiento|cerca perimetral|tapia|porton|calle de acceso/, f:.8, j:'Obra complementaria de sitio'},
   {c:'A11', en:'nombre', re:/cablead|conexionado|tablero|cajas? intermedia|docse|fuerza y control|control y fuerza/, f:.9, j:'Cableado, tableros o conexionado'},
   {c:'A6',  en:'nombre', re:/(inspeccion|recepcion).*(recepcionad|recepcion|equipo)|transporte|descarga de equipo/, f:.85, j:'Recepción / inspección de equipo'},
   {c:'A3',  en:'nombre', re:/permiso|tramite|setena|viabilidad|servidumbre/, f:.85, j:'Trámite o permiso'},
@@ -4803,6 +4877,7 @@ const REGLAS = [
   {c:'A8',  en:'grupo',  re:/canalizaci|ductos|trinchera|malla de tierra/, f:.85, j:'Grupo de canalizaciones / malla'},
   {c:'A9',  en:'grupo',  re:/instalacion de estructuras|montaje de estructuras/, f:.85, j:'Grupo de estructuras'},
   {c:'A10', en:'grupo',  re:/seccionador|interruptor|tc y tp|transformador|pararrayo|instalacion barras|interconexion/, f:.85, j:'Grupo de montaje de equipo'},
+  {c:'A8',  en:'grupo',  re:/ducto|cajas? de registro/, f:.8, j:'Grupo de ductos y cajas de registro'},
   {c:'A7',  en:'grupo',  re:/cimient|cimentaci|fundaci|obra civil|movimiento de tierra/, f:.8, j:'Grupo de fundaciones'},
   {c:'A12', en:'grupo',  re:/puesta en marcha|pruebas|comisionamiento|verif/, f:.75, j:'Grupo de puesta en marcha'},
   // prioridad 4: términos generales en el nombre
@@ -4832,9 +4907,9 @@ const PROMPT_IA = `Eres un ingeniero especialista en construcción de subestacio
 Tu tarea: clasificar cada tarea del cronograma de un contratista en UNA actividad del catálogo estándar.
 
 REGLAS:
-1. Usa SOLO los códigos del campo "catalogo" (A1…A14), "H" (hito sin duración) o "X" (no aplica).
+1. Usa SOLO los códigos del campo "catalogo" (A1…A15), "H" (hito sin duración) o "X" (no aplica).
 2. Considera el nombre de la tarea Y su grupo: el grupo da el contexto (p. ej. "Excavaciones" en el grupo del shelter es A14, no A7).
-3. Criterios de desempate: tableros de PCyM, cajas intermedias y cualquier cableado/conexionado → A11, aunque estén en el edificio de control. Sistemas eléctricos propios del edificio (iluminación, tomas) → A14. Inspección de equipo recibido → A6. Aterrizamiento, montaje de polos y calibración mecánica de equipos → A10. Solicitud o ejecución de indisponibilidad → A13. Tareas "Inicio de…"/"Finalización de…" sin trabajo propio → H.
+3. Criterios de desempate: tableros de PCyM, cajas intermedias y cualquier cableado/conexionado → A11, aunque estén en el edificio de control. Edificio de control, drenajes, accesos y obra de sitio → A14. Sistemas eléctricos del edificio, servicios propios CA/CC, baterías, canastas, bandejas y canalizaciones de control → A15. Inspección de equipo recibido → A6. Aterrizamiento, montaje de polos y calibración mecánica de equipos → A10. Solicitud o ejecución de indisponibilidad → A13. Tareas "Inicio de…"/"Finalización de…" sin trabajo propio → H.
 4. Si una tarea abarca dos actividades, elige la dominante y baja la confianza.
 5. No inventes IDs ni tareas. Devuelve una asignación por cada tarea recibida.
 6. "confianza" entre 0 y 1. "justificacion" en español, máximo 20 palabras.
@@ -4907,7 +4982,8 @@ function agregarProyecto(pr){
       ini: alguna? Math.min(...ini) : null,
       fin: todas? Math.max(...ts.map(t=>t.fin)) : null,
       estado: todas?'terminada':(alguna?'en curso':'no iniciada'),
-      aprobadas: ts.filter(t=>pr.mapeo[t.id].e==='aprobado').length};
+      aprobadas: ts.filter(t=>pr.mapeo[t.id].e==='aprobado').length,
+      cierresManuales: ts.filter(t=>t.cierreManual && t.estado==='terminada').length};
     r.durPlan = Math.max(r.finPlan-r.iniPlan,1);
     r.dur = r.fin!=null ? Math.max(r.fin-r.ini,1) : null;
     r.durMin = r.estado==='en curso' ? Math.max(pr.D.fechaDatos-r.ini,1) : null;
@@ -4958,7 +5034,7 @@ function distDe(id, fuenteForzada){
   d.moda=Math.min(Math.max(d.moda,d.min),d.max);
   return {...d, fuente:usada, seleccion:fsel, disponibles:disp};
 }
-const FUENTES = {provision:'Provisión', experto:'Experto', calibrado:'Calibrado', observado:'Observado', manual:'Manual', auto:'Automático'};
+const FUENTES = {provision:'Base', experto:'Experto', calibrado:'Calibrado', observado:'Observado', manual:'Manual', auto:'Automático'};
 
 /* =============================================================================
    §6b  CALIBRACIÓN AUTOMÁTICA CON CURVAS S SELECCIONADAS
@@ -4986,9 +5062,9 @@ const FUENTES = {provision:'Provisión', experto:'Experto', calibrado:'Calibrado
    Calidad: n=1 crítica · n=2 advertencia · n=3–4 pequeña · n≥5 aceptable.
    ============================================================================= */
 function muestraCalib(id, keys){
-  const m={durs:[], proys:[], cens:[], sinAprobar:0};
+  const m={durs:[], proys:[], cens:[], sinAprobar:0, cierres:0};
   for(const k of keys){ const pr=CACHE[k]; if(!pr) continue; const g=pr.agg[id]; if(!g||!g.n) continue;
-    if(g.dur!=null){ m.durs.push(g.dur); m.proys.push(pr.P.proyecto); if(g.aprobadas<g.n) m.sinAprobar++; }
+    if(g.dur!=null){ m.durs.push(g.dur); m.proys.push(pr.P.proyecto); if(g.aprobadas<g.n) m.sinAprobar++; m.cierres+=g.cierresManuales||0; }
     else if(g.durMin!=null) m.cens.push({p:pr.P.proyecto, min:g.durMin}); }
   return m;
 }
@@ -5011,6 +5087,7 @@ function calibrarActividad(id, keys, {peso=0}={}){
   if(cmax!=null && cmax>d.max){ d.max=cmax*1.1; r.avisos.push(`Una actividad en curso ya lleva ${cmax} d: se elevó el máximo`); }
   d.min=Math.max(0,Math.round(d.min)); d.moda=Math.round(d.moda); d.max=Math.round(d.max);
   if(d.moda<d.min) d.min=d.moda; if(d.max<=d.moda) d.max=d.moda+1;
+  if(m.cierres) r.avisos.push(`${m.cierres} tarea(s) cerradas con umbral por tarea`);
   if(m.sinAprobar) r.avisos.push(`${m.sinAprobar} de ${n} proyecto(s) con mapeo sin aprobar en esta actividad`);
   if(n<3) r.avisos.push('La dispersión viene del a priori ('+FUENTES[pri.fuente].toLowerCase()+'), no de los datos');
   r.dist=d; return r;
@@ -5089,15 +5166,15 @@ function proyectoAlCorte(pr, iCorte){
   if(iCorte==null || iCorte>=pr.P.cortes.length-1) return pr;
   const P=JSON.parse(JSON.stringify(pr.P)); P.avisos=[];
   P.cortes=P.cortes.slice(0,iCorte+1); P.tareas.forEach(t=>t.serie=t.serie.slice(0,iCorte+1));
-  const D=derivarProyecto(P, WS.cfg.umbral); const q={key:pr.key, P, D, mapeo:pr.mapeo, recorte:true}; q.agg=agregarProyecto(q); return q;
+  const D=derivarProyecto(P, WS.cfg.umbral, pr.cierres||{}); const q={key:pr.key, P, D, mapeo:pr.mapeo, cierres:pr.cierres, recorte:true}; q.agg=agregarProyecto(q); return q;
 }
 function finRealSubred(pr){ const g=CATALOGO.map(a=>pr.agg[a.id]).filter(x=>x&&x.n); return g.length&&g.every(x=>x.estado==='terminada') ? Math.max(...g.map(x=>x.fin)) : null; }
-function pronostico(pr, {N, seed, tipo}){
+function pronostico(pr, {N, seed, tipo, distFn}){
   const ids=CATALOGO.map(a=>a.id).filter(i=>pr.agg[i]&&pr.agg[i].n);
   if(!ids.length) return null;
   const {ord,pred}=redTopologica(ids);
   const hoy=pr.D.fechaDatos, r=rng(seed), smp=muestreador(tipo,r);
-  const dist={}; ids.forEach(i=>dist[i]=distDe(i));
+  const dist={}; ids.forEach(i=>dist[i]=distFn?distFn(i):distDe(i));
   const fins=new Float64Array(N), porAct={}; ids.forEach(i=>porAct[i]=new Float64Array(N));
   for(let n=0;n<N;n++){
     const ef={};
@@ -5110,7 +5187,7 @@ function pronostico(pr, {N, seed, tipo}){
     fins[n]=Math.max(...ids.map(i=>ef[i]));
   }
   const sorted=Float64Array.from(fins).sort();
-  const act={}; ids.forEach(i=>{ const s=Float64Array.from(porAct[i]).sort(); act[i]={p50:quantSorted(s,.5), p80:quantSorted(s,.8)}; });
+  const act={}; ids.forEach(i=>{ const s=Float64Array.from(porAct[i]).sort(); act[i]={p50:quantSorted(s,.5), p80:quantSorted(s,.8), sorted:s}; });
   const plan = pr.P.FF? toDay(pr.P.FF) : null;
   let pPlan=null; if(plan!=null){ let k=0; for(const x of fins) if(x<=plan) k++; pPlan=k/N; }
   return {ids, sorted, p:q=>quantSorted(sorted,q), act, plan, pPlan, hoy, N};
@@ -5137,8 +5214,8 @@ function proyActual(){ return CACHE[WS.ui.proy] || proyectos()[0] || null; }
 function recalcular(){
   CACHE={};
   for(const [k,v] of Object.entries(WS.proyectos)){
-    try{ const P=parseCurvaS(v.txt); const D=derivarProyecto(P, WS.cfg.umbral);
-      CACHE[k]={key:k, P, D, mapeo:v.mapeo, archivo:v.archivo, cargado:v.cargado}; CACHE[k].agg=agregarProyecto(CACHE[k]); }
+    try{ v.cierres=v.cierres||{}; const P=parseCurvaS(v.txt); const D=derivarProyecto(P, WS.cfg.umbral, v.cierres);
+      CACHE[k]={key:k, P, D, mapeo:v.mapeo, cierres:v.cierres, archivo:v.archivo, cargado:v.cargado}; CACHE[k].agg=agregarProyecto(CACHE[k]); }
     catch(e){ console.error(k,e); }
   }
   OBS=observadoCartera();
@@ -5147,9 +5224,10 @@ function recalcular(){
 function registrarTXT(txt, archivo){
   const P=parseCurvaS(txt); const k=P.proyecto;
   const prev=WS.proyectos[k];
-  WS.proyectos[k]={txt, archivo, cargado:new Date().toISOString(), mapeo: prev? prev.mapeo : {}};
+  WS.proyectos[k]={txt, archivo, cargado:new Date().toISOString(), mapeo: prev? prev.mapeo : {}, cierres: prev&&prev.cierres ? prev.cierres : {}};
   // reglas para tareas nuevas (no toca lo ya clasificado)
   const pr={P, mapeo:WS.proyectos[k].mapeo}; const n=aplicarReglas(pr,true);
+  if(WS.calib) WS.calib.desactualizada=true;
   return {k, nuevo:!prev, nTareas:P.tareas.length, nReglas:n};
 }
 
@@ -5171,11 +5249,11 @@ function refrescar(){
   const pr=proyActual();
   $('#n-mapeo').textContent = pr? pr.P.tareas.filter(t=>!(pr.mapeo[t.id]&&pr.mapeo[t.id].c)).length||'✓' : '';
   $('#n-val').textContent = pr? pr.D.anom.filter(a=>TIPOS_ANOM[a.tipo]&&TIPOS_ANOM[a.tipo].sev!=='info').length : '';
-  $('#railFoot').innerHTML = `Catálogo v${CATALOGO_VERSION} · 14 actividades<br>Umbral de terminación: <b class="mono">${WS.cfg.umbral} %</b><br>Datos en este navegador · exporta el espacio para respaldar.`;
+  $('#railFoot').innerHTML = `Catálogo v${CATALOGO_VERSION} · 15 actividades<br>Umbral de terminación: <b class="mono">${WS.cfg.umbral} %</b><br>Datos en este navegador · exporta el espacio para respaldar.`;
   render();
 }
 function render(){
-  ({cartera:vCartera, mapeo:vMapeo, validacion:vValidacion, dist:vDist, red:vRed, pron:vPron})[VISTA]();
+  ({cartera:vCartera, mapeo:vMapeo, validacion:vValidacion, dist:vDist, red:vRed, pron:vPron, valmod:vValMod})[VISTA]();
 }
 function irA(v){ VISTA=v; $$('#rail button').forEach(b=>b.classList.toggle('on',b.dataset.v===v)); $$('.view').forEach(s=>s.classList.toggle('on', s.id==='v-'+v)); $('#main').scrollTop=0; render(); }
 
@@ -5321,7 +5399,7 @@ function abrirCelda(key, id){
     <p class="note"><b>Cómo se obtiene:</b> inicio real = ${fmtD(g.ini)} (primera tarea con avance) · fin real = ${g.fin!=null?fmtD(g.fin):'— (hay tareas sin terminar)'} (última tarea en llegar a ${WS.cfg.umbral} %). En la curva: <span style="color:#6cb6ff">— avance acumulado usado</span>, <span style="color:#f0a35a">··· dato original si retrocede</span>, franja gris = periodo planificado.</p>
     <table class="t" style="margin-top:10px"><thead><tr><th>ID</th><th>Tarea</th><th>Avance en el tiempo</th><th class="num">Real</th><th class="num">Plan</th></tr></thead><tbody>${
       ts.map(t=>`<tr><td class="mono">${t.id}</td><td>${esc(t.nombre)}<div class="muted" style="font-size:11px">${esc(t.grupo)}${links(t)?' · '+links(t):''}</div></td><td>${sparkSerie(t,p.D.C)}</td>
-        <td class="num">${t.durReal!=null?t.durReal+' d':(t.durMin!=null?'≥'+t.durMin+' d':'—')}<div class="muted" style="font-size:10.5px">${t.avance} %</div></td><td class="num">${t.durPlan} d</td></tr>`).join('')}</tbody></table>`;
+        <td class="num">${t.durReal!=null?t.durReal+' d':(t.durMin!=null?'≥'+t.durMin+' d':'—')}<div class="muted" style="font-size:10.5px">${t.avance} %</div>${t.ini!=null?`<a href="#" class="lnkCierre" data-k="${esc(p.key)}" data-id="${t.id}" style="font-size:10.5px${t.cierreManual?';color:#ffcf70':''}">${t.cierreManual?'⊘ '+t.umbral+' %':'cierre…'}</a>`:''}</td><td class="num">${t.durPlan} d</td></tr>`).join('')}</tbody></table>`;
   $('#drawer').classList.add('on');
 }
 function urlCon(base, q){ try{ const u=new URL(base, location.href); Object.entries(q).forEach(([k,v])=>v!=null&&u.searchParams.set(k,v)); return u.toString(); }catch(e){ return base; } }
@@ -5352,7 +5430,7 @@ function vMapeo(){
     if(t.grupo!==g){ g=t.grupo; h+=`<tr class="grp"><td colspan="3">${esc(g||'(sin grupo)')}</td><td colspan="2"><select class="grpSel" data-g="${esc(g)}" style="width:100%;font-size:11.5px">${opcionesCodigo('').replace('<option value="" selected>— sin clasificar —</option>','<option value="" selected>Asignar todo el grupo a…</option>')}</select></td><td><button class="btn sm ghost grpApr" data-g="${esc(g)}" data-tip="Aprueba las sugerencias de este grupo">✓ grupo</button></td></tr>`; }
     const m=M[t.id]||{}; const cambio=m.n&&m.n!==t.nombre;
     h+=`<tr><td class="mono">${t.id}</td><td>${esc(t.nombre)}${cambio?`<div class="flag warn" data-tip="Clasificada como: ${esc(m.n)}">⚠ el nombre cambió desde que se clasificó</div>`:''}<div class="muted" style="font-size:11px">Plan ${fmtDs(t.fi)} → ${fmtDs(t.ff)} · ${t.durPlan} d</div></td>
-      <td style="font-size:11.5px;white-space:nowrap">${t.estado==='terminada'?`${t.durReal} d`:(t.estado==='en curso'?`<span class="muted">en curso · ${t.avance} %</span>`:'<span class="muted">no iniciada</span>')}</td>
+      <td style="font-size:11.5px;white-space:nowrap">${t.estado==='terminada'?`${t.durReal} d`:(t.estado==='en curso'?`<span class="muted">en curso · ${t.avance} %</span>`:'<span class="muted">no iniciada</span>')}${t.ini!=null?`<br><a href="#" class="lnkCierre" data-k="${esc(p.key)}" data-id="${t.id}" style="font-size:10.5px${t.cierreManual?';color:#ffcf70':''}" data-tip="Umbral de cierre de esta tarea">${t.cierreManual?'⊘ cierre '+t.umbral+' %':'cierre…'}</a>`:''}</td>
       <td><div class="row" style="gap:6px;flex-wrap:nowrap"><span class="dot" style="background:${m.c?colorAct(m.c):'transparent'};border:1px solid ${m.c?'transparent':'#46607c'};margin:0"></span><select class="codeSel" data-id="${t.id}" style="width:100%">${opcionesCodigo(m.c)}</select></div></td>
       <td style="white-space:nowrap">${m.c?`<span class="badge b-${m.o==='ia'?'ia':(m.o==='manual'?'manual':'reglas')}" data-tip="${esc(m.j||'')}">${m.o==='ia'?'IA':(m.o==='manual'?'Manual':'Reglas')}</span> ${m.o!=='manual'?`<span class="conf" data-tip="Confianza ${nf((m.f||0)*100)} %"><i style="width:${(m.f||0)*100}%"></i></span>`:''}`:''}</td>
       <td>${m.c?(m.e==='aprobado'?`<button class="btn sm ghost apr" data-id="${t.id}" data-tip="Aprobada. Clic para devolver a sugerida"><span class="badge b-ok">✓ Aprobada</span></button>`:`<button class="btn sm apr" data-id="${t.id}">Aprobar</button>`):''}</td></tr>`;
@@ -5455,18 +5533,21 @@ function vValidacion(){
     <div class="kpi"><div class="v" style="color:var(--info)">ℹ ${sev('info')}</div><div class="l">Informativas</div></div>
     <div class="kpi"><div class="v">${cens.length}</div><div class="l">Actividades censuradas (en curso)</div></div>`;
   let h=`<div class="grid g2">`;
-  const orden=['pred_inexistente','fecha_pred','fechas_invertidas','serie','id_duplicado','retroceso','no_cierra','sin_pred'];
+  const orden=['pred_inexistente','fecha_pred','fechas_invertidas','serie','id_invalido','id_duplicado','retroceso','no_cierra','cierre_manual','sin_pred'];
   for(const k of orden){ const L=by[k]; if(!L) continue; const T=TIPOS_ANOM[k];
     const ic=T.sev==='crit'?'●':(T.sev==='warn'?'▲':'ℹ'), bc=T.sev==='crit'?'b-crit':(T.sev==='warn'?'b-sug':'b-info');
     h+=`<div class="card"><div class="row"><span class="badge ${bc}">${ic} ${T.sev==='crit'?'Crítica':(T.sev==='warn'?'Advertencia':'Info')}</span><h3 style="margin:0">${T.n}</h3><span class="spacer"></span><span class="mono muted">${L.length}</span></div>
-      <p class="sub" style="margin-top:6px">${T.exp}</p><table class="t"><tbody>${L.map(a=>{ const t=p.P.tareas.find(x=>x.id===a.id);
-        return `<tr><td class="mono" style="width:44px">${esc(a.id)}</td><td>${t?esc(trunc(t.nombre,54)):''}<div class="muted" style="font-size:11.5px">${esc(a.msg)}</div></td></tr>`; }).join('')}</tbody></table></div>`; }
+      <p class="sub" style="margin-top:6px">${T.exp}</p>
+      ${k==='no_cierra'?`<div class="row" style="margin-bottom:8px"><button class="btn sm" id="btnCierreLote">⊘ Definir cierre para todas…</button><span class="muted" style="font-size:11.5px">o por tarea con «Cerrar…»</span></div>`:''}
+      <table class="t"><tbody>${L.map(a=>{ const t=p.P.tareas.find(x=>x.id===a.id);
+        const btn = k==='no_cierra' ? `<button class="btn sm lnkCierre" data-k="${esc(p.key)}" data-id="${esc(a.id)}">Cerrar…</button>` : (k==='cierre_manual' ? `<button class="btn sm ghost lnkCierre" data-k="${esc(p.key)}" data-id="${esc(a.id)}">Editar</button>` : '');
+        return `<tr><td class="mono" style="width:44px">${esc(a.id)}</td><td>${t?esc(trunc(t.nombre,54)):''}<div class="muted" style="font-size:11.5px">${esc(a.msg)}</div></td>${btn?`<td style="text-align:right;width:80px">${btn}</td>`:''}</tr>`; }).join('')}</tbody></table></div>`; }
   h+=`<div class="card"><div class="row"><span class="badge b-info">⇄ Mapeo</span><h3 style="margin:0">Calidad del mapeo</h3></div><table class="t" style="margin-top:8px"><tbody>
      <tr><td>Tareas sin clasificar</td><td class="num">${sin.length}</td></tr>
      <tr><td>Tareas cuyo nombre cambió desde que se clasificaron</td><td class="num">${cambio.length}</td></tr>
      <tr><td>Asignaciones a IDs que ya no existen en el TXT</td><td class="num">${huerf.length}</td></tr>
      <tr><td>Actividades en curso (dato censurado, fuera de la muestra)</td><td class="num">${cens.map(a=>a.id).join(', ')||'—'}</td></tr></tbody></table>
-     <p class="note" style="margin-top:10px">Umbral de terminación actual: <b>${WS.cfg.umbral} %</b>. Con ${by.no_cierra?by.no_cierra.length:0} tareas que no cierran, un umbral de 95 % aumenta la muestra pero debe declararse como supuesto (se cambia en ⚙).</p></div>`;
+     <p class="note" style="margin-top:10px">Umbral de terminación actual: <b>${WS.cfg.umbral} %</b>. Con ${by.no_cierra?by.no_cierra.length:0} tareas que no cierran, un umbral global de 95 % (⚙) aumenta la muestra; si solo algunas tareas quedan abiertas por pendientes menores, es preferible definir un <b>cierre por tarea</b> con su justificación. Cierres por tarea definidos: <b>${Object.keys(p.cierres||{}).length}</b>.</p></div>`;
   $('#valBody').innerHTML=h+'</div>';
 }
 
@@ -5495,7 +5576,7 @@ function vDist(){
         con = fuera? `<span class="flag warn" data-tip="Percentiles de lo observado en la distribución ${FUENTES[d.fuente]}: ${ps.map(q=>Math.round(q*100)+' %').join(', ')}">▲ ${fuera}/${ps.length} fuera de P10–P90</span>` : `<span class="flag ok" data-tip="Percentiles: ${ps.map(q=>Math.round(q*100)+' %').join(', ')}">✓ converge</span>`; }
       h+=`<tr><td><span class="code" style="color:${colorAct(a.id)}">${a.id}</span> ${esc(a.n)}</td>
         <td><select class="srcsel" data-id="${a.id}">${['auto','provision','experto','calibrado','observado','manual'].map(k=>`<option value="${k}" ${d.seleccion===k?'selected':''} ${k!=='auto'&&k!=='manual'&&!avail.includes(k)?'disabled':''}>${FUENTES[k]}${k==='auto'?' → '+FUENTES[d.fuente]:''}${k==='observado'&&!avail.includes(k)?' (n<'+N_MIN_OBS+')':''}${k==='experto'&&!avail.includes(k)?' (sin datos)':''}${k==='calibrado'&&!avail.includes(k)?' (sin calibrar)':''}</option>`).join('')}</select>
-          ${d.fuente==='provision'?' <span class="badge b-sug" data-tip="Valor provisional del catálogo: sustituir con criterio experto u observaciones">provisión</span>':''}
+          ${d.fuente==='provision'&&a.prel?' <span class="badge b-sug" data-tip="Valor preliminar por analogía (Tabla 38): recalibrar con la adenda del cuestionario o con Curvas S">preliminar</span>':''}
           ${d.fuente==='calibrado'?(()=>{ const c=WS.calibrado[a.id], q=calidadMuestra(c.n); return ` <span class="badge ${q.k==='crit'?'b-crit':q.k==='warn'?'b-sug':q.k==='info'?'b-info':'b-ok'}" data-tip="${esc(c.metodo)} · ${esc(c.proys.join(', '))}">${q.k==='crit'?'●':q.k==='warn'?'▲':q.k==='info'?'ℹ':'✓'} n=${c.n}</span>`; })():''}</td>
         ${['min','moda','max'].map(k=>`<td class="num">${ed?`<input class="dist-in" type="number" min="0" data-id="${a.id}" data-k="${k}" value="${d[k]}">`:nf(d[k],d[k]%1?1:0)}</td>`).join('')}
         <td>${formaDist(d,o.durs,o.cens)}</td>
@@ -5508,9 +5589,10 @@ function vDist(){
   $('#calibBanner').innerHTML = C ? `<div class="card" style="margin-bottom:12px;border-color:${C.nMin<3?'#6b5320':'#28553a'}"><div class="row"><span class="badge ${C.nMin<3?'b-sug':'b-ok'}">${C.nMin<3?'▲ Muestra pequeña':'✓ Calibrado'}</span>
       <b>Calibración ${fmtD(C.fecha.slice(0,10))}</b><span class="muted">· ${C.proyectos.length} Curva${C.proyectos.length>1?'s':''} S: ${esc(C.proyectos.join(', '))} · ${C.actividades.length} actividades · umbral ${C.umbral} %${C.peso?` · mezcla w=${C.peso}`:''}</span>
       <span class="spacer"></span><button class="btn sm" id="btnCalib2">Recalibrar</button><button class="btn sm ghost" id="btnCalibUndo">↺ Deshacer</button></div>
+      ${C.desactualizada?`<p class="flag warn" style="margin:8px 0 0">▲ Los datos cambiaron desde esta calibración (cierres por tarea o nuevas curvas): recalibra para incorporarlos.</p>`:''}
       ${C.nMin<3?`<p class="sub" style="margin:8px 0 0">Algunas actividades se calibraron con menos de 3 proyectos: su dispersión proviene del a priori y los resultados pueden no ser representativos. Recalibra al cargar más Curvas S.</p>`:''}</div>` : '';
   const nExp=Object.keys(WS.experto).length;
-  $('#distNote').innerHTML=`<b>Contraste experto ↔ observado</b> (validación cruzada del capítulo 6): para cada duración observada se calcula su percentil dentro de la distribución usada; si cae fuera de P10–P90 se marca. Expertos importados: <b>${nExp}</b> actividades. Las provisiones deben sustituirse antes de reportar resultados definitivos.`;
+  $('#distNote').innerHTML=`<b>Contraste experto ↔ observado</b> (validación cruzada del capítulo 6): para cada duración observada se calcula su percentil dentro de la distribución usada; si cae fuera de P10–P90 se marca. Expertos importados: <b>${nExp}</b> actividades. Base = Tabla 38 del capítulo 6; A14 y A15 son preliminares por analogía hasta recalibrarlas.`;
 }
 
 /* ---------- RED Y MONTE CARLO ---------- */
@@ -5534,7 +5616,7 @@ function vRed(){
     s+=`<g class="nnode ${SELNODE===a.id?'sel':''} ${cr!=null&&cr>=.5?'crit':''}" data-node="${a.id}" transform="translate(${P.x},${P.y})" data-tip="${esc(`<b>${a.id} ${a.n}</b><br>${a.d}<br><br>Distribución (${FUENTES[d.fuente]}): ${nf(d.min)} · ${nf(d.moda)} · ${nf(d.max)} d${cr!=null?'<br>Índice de criticidad: '+nf(cr*100)+' %':''}`)}">
       <rect class="box" width="${NW}" height="${NH}" rx="9"/><rect width="5" height="${NH}" rx="2.5" fill="${c}"/>
       <text x="13" y="17" font-size="11" font-weight="600" class="mono" fill="${c}">${a.id}</text>
-      <text x="${NW-8}" y="17" font-size="9.5" text-anchor="end" fill="${d.fuente==='provision'||(d.fuente==='calibrado'&&WS.calibrado[a.id].n<3)?cssv('--warn'):cssv('--ink3')}">${FUENTES[d.fuente].toLowerCase()}${d.fuente==='calibrado'?' n='+WS.calibrado[a.id].n:''}</text>
+      <text x="${NW-8}" y="17" font-size="9.5" text-anchor="end" fill="${(d.fuente==='provision'&&a.prel)||(d.fuente==='calibrado'&&WS.calibrado[a.id].n<3)?cssv('--warn'):cssv('--ink3')}">${FUENTES[d.fuente].toLowerCase()}${d.fuente==='calibrado'?' n='+WS.calibrado[a.id].n:''}</text>
       <text x="13" y="33" font-size="11.5" fill="${cssv('--ink')}">${esc(trunc(a.corto,16))}</text>
       <text x="13" y="${NH-10}" font-size="10" class="mono" fill="${cssv('--ink2')}">${nf(d.min)}·${nf(d.moda)}·${nf(d.max)} d</text>
       ${cr!=null?`<rect x="${NW-44}" y="${NH-19}" width="36" height="12" rx="3" fill="#0a1522"/><rect x="${NW-44}" y="${NH-19}" width="${36*cr}" height="12" rx="3" fill="${cssv('--crit')}" opacity="${.35+.65*cr}"/><text x="${NW-26}" y="${NH-10}" font-size="9" text-anchor="middle" class="mono" fill="#fff">${Math.round(cr*100)}%</text>`:''}
@@ -5573,6 +5655,120 @@ function pintarMC(){
   const os=[...CATALOGO].sort((a,b)=>MC.sens[b.id]-MC.sens[a.id]);
   $('#sensChart').innerHTML=barH(os.map(a=>({label:`${a.id} ${a.corto}`, v:MC.sens[a.id], c:colorAct(a.id)})),{max:1, fmt:v=>nf(v,2)});
 }
+/* ---------- GRÁFICO PARA INFORME ----------------------------------------------
+   Figura estática en estilo de publicación (fondo blanco, tipografía serif,
+   escala de grises): histograma de la duración total (eje izquierdo) y
+   probabilidad acumulada (eje derecho), con la programación determinista,
+   P50, P80 y la reserva de contingencia P80 − P50. Se exporta en SVG o PNG.
+------------------------------------------------------------------------------ */
+function pasoBonito(x){ const p=Math.pow(10,Math.floor(Math.log10(x))); for(const m of [1,2,2.5,5,10]) if(m*p>=x) return m*p; return 10*p; }
+function svgInforme(R, o={}){
+  const W=900, H=520, mL=70, mR=70, mT=16, mB=58, pw=W-mL-mR, ph=H-mT-mB;
+  const S=R.sorted, N=S.length, det=R.det.T, p50=R.p(.5), p80=R.p(.8);
+  let pDet=0; for(const x of S) if(x<=det) pDet++; pDet/=N;
+  const bw=o.bin||pasoBonito((S[N-1]-S[0])/80);
+  const x0=Math.floor(Math.min(S[0],det)/bw)*bw, x1=Math.ceil(S[N-1]/bw)*bw;
+  const nb=Math.max(1,Math.round((x1-x0)/bw)), cnt=new Array(nb).fill(0);
+  for(const x of S) cnt[Math.min(nb-1,Math.floor((x-x0)/bw))]++;
+  const xt=pasoBonito((x1-x0)/8), xa=Math.floor(x0/xt)*xt, xb=Math.ceil(x1/xt)*xt;
+  const X=v=>mL+(v-xa)/(xb-xa)*pw;
+  const cmax=Math.max(...cnt), yt=pasoBonito(cmax/7), ymax=Math.ceil(cmax*1.05/yt)*yt;
+  const Yc=c=>mT+ph-c/ymax*ph, Yp=p=>mT+ph-p*ph;
+  const F=v=>{ let a=0,b=N; while(a<b){const m=(a+b)>>1; if(S[m]<=v) a=m+1; else b=m;} return a/N; };
+  const ff="'Times New Roman', 'DejaVu Serif', Georgia, serif", ink='#222', fs=o.fs||14;
+  const r0=v=>Math.round(v), pc=v=>Math.round(v*100);
+  let s=`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="${ff}" font-size="${fs}" fill="${ink}">
+  <rect width="${W}" height="${H}" fill="#ffffff"/>
+  <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="${ink}"/></marker></defs>`;
+  // barras
+  cnt.forEach((c,i)=>{ if(!c) return; const xa_=X(x0+i*bw), xb_=X(x0+(i+1)*bw);
+    s+=`<rect x="${xa_.toFixed(2)}" y="${Yc(c).toFixed(2)}" width="${(xb_-xa_).toFixed(2)}" height="${(mT+ph-Yc(c)).toFixed(2)}" fill="#dcdcdc" stroke="#b8b8b8" stroke-width="0.6"/>`; });
+  // marco y ejes
+  s+=`<rect x="${mL}" y="${mT}" width="${pw}" height="${ph}" fill="none" stroke="#888" stroke-width="1"/>`;
+  for(let v=xa; v<=xb+1e-9; v+=xt){ const x=X(v); s+=`<line x1="${x}" x2="${x}" y1="${mT+ph}" y2="${mT+ph+5}" stroke="#444"/><text x="${x}" y="${mT+ph+21}" text-anchor="middle">${nf(v,v%1?1:0)}</text>`; }
+  for(let c=0; c<=ymax+1e-9; c+=yt){ const y=Yc(c); s+=`<line x1="${mL-5}" x2="${mL}" y1="${y}" y2="${y}" stroke="#444"/><text x="${mL-9}" y="${y+4.5}" text-anchor="end">${nf(c)}</text>`; }
+  for(let p=0; p<=100; p+=20){ const y=Yp(p/100); s+=`<line x1="${mL+pw}" x2="${mL+pw+5}" y1="${y}" y2="${y}" stroke="#444"/><text x="${mL+pw+9}" y="${y+4.5}">${p}</text>`; }
+  s+=`<text x="${mL+pw/2}" y="${H-12}" text-anchor="middle" font-size="${fs+1}">${esc(o.xlab||'Duración total del módulo (días calendario)')}</text>
+  <text transform="translate(20 ${mT+ph/2}) rotate(-90)" text-anchor="middle" font-size="${fs+1}">Frecuencia (iteraciones)</text>
+  <text transform="translate(${W-16} ${mT+ph/2}) rotate(-90)" text-anchor="middle" font-size="${fs+1}">Probabilidad acumulada (%)</text>`;
+  // líneas verticales
+  s+=`<line x1="${X(det)}" x2="${X(det)}" y1="${mT}" y2="${mT+ph}" stroke="#333" stroke-width="1.3" stroke-dasharray="1.5 3"/>
+  <line x1="${X(p50)}" x2="${X(p50)}" y1="${mT}" y2="${mT+ph}" stroke="#333" stroke-width="1.3" stroke-dasharray="6 4"/>
+  <line x1="${X(p80)}" x2="${X(p80)}" y1="${mT}" y2="${mT+ph}" stroke="#333" stroke-width="1.3" stroke-dasharray="6 4"/>`;
+  // curva acumulada
+  let d=''; const st=Math.max(1,Math.floor(N/400)); for(let i=0;i<N;i+=st) d+=(i?'L':'M')+X(S[i]).toFixed(1)+','+Yp((i+1)/N).toFixed(1); d+='L'+X(S[N-1]).toFixed(1)+','+Yp(1).toFixed(1);
+  s+=`<path d="${d}" fill="none" stroke="#2b2b2b" stroke-width="2.6" stroke-linejoin="round"/>`;
+  if(o.anot!==false){
+    // reserva de contingencia
+    const ya=mT+38, res=r0(p80)-r0(p50);
+    s+=`<line x1="${X(p50)+2}" x2="${X(p80)-2}" y1="${ya}" y2="${ya}" stroke="${ink}" stroke-width="1.1" marker-start="url(#ar)" marker-end="url(#ar)"/>
+    <text x="${(X(p50)+X(p80))/2}" y="${ya-10}" text-anchor="middle" stroke="#ffffff" stroke-width="5" stroke-linejoin="round" paint-order="stroke">reserva de contingencia ${res} d</text>`;
+    // ---- anotaciones sin cruces ----
+    // Se mide el texto y cada rótulo se ubica a la IZQUIERDA y por ENCIMA de su punto
+    // en la curva, conservando el orden vertical (determinista abajo, P50 arriba):
+    // así las líneas guía nunca se cruzan.
+    const cv=(svgInforme._c=svgInforme._c||document.createElement('canvas')).getContext('2d');
+    cv.font=`${fs}px "Times New Roman", "DejaVu Serif", Georgia, serif`;
+    const tw=t=>{ const m=cv.measureText(t).width; return 1.1*(m>0?m:t.length*fs*0.48); }, lh=fs+3;
+    const halo='stroke="#ffffff" stroke-width="4" stroke-linejoin="round" paint-order="stroke"', guia='stroke="#555" stroke-width="0.9"';
+    // determinista: alineado a la DERECHA (text-anchor="end") a 30 px del punto, así el
+    // borde derecho es exacto aunque la fuente real difiera; si no cabe, se parte en más líneas.
+    const pdx=X(det), pdy=Yp(F(det)), rxD=pdx-30, libre=rxD-(mL+10);
+    const opciones=[
+      ['programación determinista',`con valores modales: ${r0(det)} d`,`(probabilidad de cumplimiento ${pc(pDet)} %)`],
+      ['programación determinista','con valores modales:',`${r0(det)} d (probabilidad de`,`cumplimiento ${pc(pDet)} %)`],
+      ['programación','determinista con','valores modales:',`${r0(det)} d`,`(prob. ${pc(pDet)} %)`]];
+    const LD=opciones.find(o=>Math.max(...o.map(tw))<=libre)||opciones[2];
+    let yb=Math.min(pdy-30, mT+ph-12); const nL=LD.length-1;
+    if(yb-nL*lh-fs<mT+70) yb=mT+70+nL*lh+fs;
+    const topD=yb-nL*lh-fs;
+    s+=`<text x="${rxD}" y="${yb-nL*lh}" text-anchor="end" ${halo}>${LD.map((t,k)=>`<tspan x="${rxD}" ${k?`dy="${lh}"`:''}>${esc(t)}</tspan>`).join('')}</text>
+    <line x1="${rxD+4}" y1="${yb-fs*0.35}" x2="${pdx}" y2="${pdy}" ${guia}/>`;
+    // P50: también alineado a la derecha, a 22 px de su punto. Entre las dos líneas
+    // verticales si cabe; si no, encima del bloque determinista.
+    const t5=`P50 = ${r0(p50)} d`, w5=tw(t5), p5x=X(p50), p5y=Yp(.5), rx5=p5x-22;
+    const l5y = (rx5-w5 > pdx+8) ? Math.max(mT+64, p5y-56) : Math.max(mT+64, Math.min(p5y-56, topD-16));
+    s+=`<text x="${rx5}" y="${l5y}" text-anchor="end" ${halo}>${t5}</text><line x1="${rx5+4}" y1="${l5y-fs*0.35}" x2="${p5x}" y2="${p5y}" ${guia}/>`;
+    // P80 (a la derecha y debajo de su punto)
+    const t8=`P80 = ${r0(p80)} d`, w8=tw(t8), p8x=X(p80), p8y=Yp(.8);
+    const l8x=Math.min(mL+pw-w8-10, p8x+44), l8y=Math.min(mT+ph-20, p8y+88);
+    s+=`<text x="${l8x}" y="${l8y}" ${halo}>${t8}</text><line x1="${l8x-5}" y1="${l8y-fs*0.35}" x2="${p8x}" y2="${p8y}" ${guia}/>`;
+  }
+  return {svg:s+'</svg>', W, H, det, p50, p80, pDet, bw};
+}
+function modalInforme(){
+  if(!MC){ toast('Ejecuta la simulación primero.'); return; }
+  const hayEsc=MCesc&&Object.keys(WS.escenarios[WS.ui.esc].aj).length;
+  abrirModal(`<h2>Gráfico para informe</h2>
+    <p class="sub">Histograma de la duración total y probabilidad acumulada, en estilo de publicación. Descárgalo e insértalo en el documento; el título va en el pie de figura.</p>
+    <div class="row" style="margin-bottom:10px">
+      <label class="muted">Serie</label><select id="giSer"><option value="base">Base</option>${hayEsc?`<option value="esc">${esc(WS.escenarios[WS.ui.esc].nombre)}</option>`:''}</select>
+      <label class="muted">Ancho de clase</label><select id="giBin"><option value="0">Automático</option><option value="1">1 d</option><option value="2">2 d</option><option value="2.5">2,5 d</option><option value="5">5 d</option><option value="10">10 d</option></select>
+      <label class="muted">Texto</label><select id="giFs"><option value="13">Pequeño</option><option value="14" selected>Normal</option><option value="16">Grande</option></select>
+      <label class="muted"><input type="checkbox" id="giAn" checked> Anotaciones</label>
+    </div>
+    <div id="giFig" style="background:#fff;border-radius:8px;padding:6px;overflow:auto"></div>
+    <div class="note" style="margin-top:10px"><b>Pie de figura sugerido:</b> <span id="giCap"></span> <button class="btn sm ghost" id="giCapCp">⧉ Copiar</button></div>
+    <div class="row" style="margin-top:14px"><span class="muted" id="giInfo"></span><span class="spacer"></span>
+      <button class="btn" id="giSvg">⇩ SVG</button><button class="btn" id="giPng">⇩ PNG (300 ppp)</button><button class="btn pri" id="giCopy">⧉ Copiar imagen</button><button class="btn" data-close>Cerrar</button></div>`);
+  let G=null;
+  const upd=()=>{ const R=$('#giSer').value==='esc'&&hayEsc?MCesc:MC;
+    G=svgInforme(R,{bin:+$('#giBin').value||0, fs:+$('#giFs').value, anot:$('#giAn').checked});
+    $('#giFig').innerHTML=G.svg.replace('<svg ','<svg style="width:100%;height:auto;display:block" ');
+    $('#giCap').textContent=`Distribución de la duración total del módulo obtenida por simulación de Monte Carlo (${nf(R.N)} iteraciones, distribución ${R.tipo==='pert'?'Beta-PERT':'triangular'}, semilla ${R.seed}). P50 = ${Math.round(G.p50)} d; P80 = ${Math.round(G.p80)} d; programación determinista con valores modales = ${Math.round(G.det)} d (probabilidad de cumplimiento ${Math.round(G.pDet*100)} %).`;
+    $('#giInfo').textContent=`Clase de ${nf(G.bw,G.bw%1?1:0)} d`; };
+  ['#giSer','#giBin','#giFs','#giAn'].forEach(k=>$(k).onchange=upd); upd();
+  const nombre=()=>`fig_montecarlo_${$('#giSer').value}_${MC.seed}`;
+  const aPng=(escala)=>new Promise((ok,ko)=>{ const img=new Image(); const url=URL.createObjectURL(new Blob([G.svg],{type:'image/svg+xml'}));
+    img.onload=()=>{ const c=document.createElement('canvas'); c.width=G.W*escala; c.height=G.H*escala; const x=c.getContext('2d'); x.fillStyle='#fff'; x.fillRect(0,0,c.width,c.height); x.drawImage(img,0,0,c.width,c.height); URL.revokeObjectURL(url); c.toBlob(b=>b?ok(b):ko(new Error('PNG')),'image/png'); };
+    img.onerror=()=>ko(new Error('No se pudo rasterizar')); img.src=url; });
+  const bajar=(blob,n)=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=n; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},500); };
+  $('#giSvg').onclick=()=>bajar(new Blob([G.svg],{type:'image/svg+xml'}), nombre()+'.svg');
+  $('#giPng').onclick=async()=>{ try{ bajar(await aPng(3.33), nombre()+'.png'); }catch(e){ toast(e.message); } };
+  $('#giCopy').onclick=async()=>{ try{ const b=await aPng(3.33); await navigator.clipboard.write([new ClipboardItem({'image/png':b})]); toast('Imagen copiada: pégala en Word.'); }catch(e){ toast('El navegador no permitió copiar; usa «PNG».'); } };
+  $('#giCapCp').onclick=async()=>{ try{ await navigator.clipboard.writeText($('#giCap').textContent); toast('Pie de figura copiado.'); }catch(e){ toast('No se pudo copiar.'); } };
+}
+
 function nodeCard(){
   const el=$('#nodeCard'); if(!SELNODE){ el.innerHTML='<h3>Actividad</h3><p class="sub">Selecciona un nodo de la red.</p>'; return; }
   const a=ACT[SELNODE], d=distDe(a.id), o=OBS[a.id];
@@ -5592,6 +5788,68 @@ function correrMC(){
   const aj=WS.escenarios[WS.ui.esc].aj; MCesc = Object.keys(aj).length ? montecarlo({N,seed,tipo,ajustes:aj}) : null;
   $('#mcTime').textContent=`${nf(performance.now()-t0)} ms`;
   vRed();
+}
+
+/* ---------- UMBRAL DE CIERRE POR TAREA ---------- */
+function marcarCambioDatos(){ MC=null; MCesc=null; PRON=null; if(WS.calib) WS.calib.desactualizada=true; }
+function sparkGrande(t, C, u){
+  const w=560,h=120,pl=34,pb=18,s=t.serie, lo=C[0], hi=C[C.length-1], span=Math.max(hi-lo,1);
+  const X=d=>pl+(d-lo)/span*(w-pl-8), Y=v=>6+(h-pb-6)*(1-v/100);
+  let acc=0,d1='',d2=''; s.forEach((v,i)=>{ acc=Math.max(acc,v); d1+=(i?'L':'M')+X(C[i]).toFixed(1)+','+Y(acc).toFixed(1); d2+=(i?'L':'M')+X(C[i]).toFixed(1)+','+Y(v).toFixed(1); });
+  let g=''; [0,50,100].forEach(v=>g+=`<line x1="${pl}" x2="${w-8}" y1="${Y(v)}" y2="${Y(v)}" stroke="${cssv('--line')}"/><text x="${pl-5}" y="${Y(v)+3}" font-size="10" text-anchor="end" fill="${cssv('--ink3')}" class="mono">${v}%</text>`);
+  return `<svg width="100%" viewBox="0 0 ${w} ${h}">${g}<rect x="${X(t.dFi)}" y="6" width="${Math.max(X(t.dFf)-X(t.dFi),2)}" height="${h-pb-6}" fill="#8aa2bb" opacity=".14"/>
+    <line class="uLine" x1="${pl}" x2="${w-8}" y1="${Y(u)}" y2="${Y(u)}" stroke="${cssv('--warn')}" stroke-dasharray="5 3"/>
+    ${d1!==d2?`<path d="${d2}" fill="none" stroke="#f0a35a" stroke-width="1" stroke-dasharray="2 2"/>`:''}<path d="${d1}" fill="none" stroke="#6cb6ff" stroke-width="2"/>
+    <text x="${pl}" y="${h-3}" font-size="10" fill="${cssv('--ink3')}" class="mono">${fmtDs(lo)}</text><text x="${w-8}" y="${h-3}" font-size="10" text-anchor="end" fill="${cssv('--ink3')}" class="mono">${fmtDs(hi)}</text></svg>`;
+}
+function finCon(t, C, u){ const i=indiceCierre(t.serie,u); if(i<0||t.ini==null) return null; const f=Math.max(i<=0?C[0]:Math.floor((C[i-1]+C[i])/2), t.ini); return {fin:f, dur:Math.max(f-t.ini,1)}; }
+function modalCierre(key, id){
+  const p=CACHE[key], t=p&&p.P.tareas.find(x=>x.id===id); if(!t) return;
+  const cur=(WS.proyectos[key].cierres||{})[id];
+  const sug = cur ? cur.u : (t.avanceMax<100 ? Math.floor(t.avanceMax) : WS.cfg.umbral);
+  const ultimos=t.serie.slice(-1)[0], k=(()=>{ let n=0; for(let i=t.serie.length-1;i>=0&&t.serie[i]>=t.avanceMax;i--) n++; return n; })();
+  abrirModal(`<h2>Umbral de cierre por tarea</h2>
+    <p class="sub"><span class="mono">#${esc(t.id)}</span> <b>${esc(t.nombre)}</b> · ${esc(t.grupo)} · ${esc(p.P.proyecto)}</p>
+    <div class="card" style="margin-bottom:12px"><div id="ciSpark">${sparkGrande(t,p.D.C,sug)}</div>
+      <div class="legend" style="margin-top:4px"><span><span class="sw" style="background:#6cb6ff"></span>Avance acumulado</span><span><span class="sw" style="background:var(--warn)"></span>Umbral de cierre</span><span><span class="sw" style="background:#8aa2bb;opacity:.4"></span>Periodo planificado</span></div>
+      <p class="muted" style="margin:8px 0 0;font-size:11.5px">Avance máximo alcanzado: <b class="mono">${t.avanceMax} %</b> · último corte: <b class="mono">${ultimos} %</b> · ${k} corte(s) en su máximo.</p></div>
+    <div class="form-row"><label>Cerrar al alcanzar</label><div class="row"><input type="number" id="ciU" min="50" max="100" step="1" value="${sug}" style="width:80px"> <span>%</span>
+      <span class="muted" style="font-size:11.5px">Umbral global: ${WS.cfg.umbral} %</span></div></div>
+    <div class="form-row"><label>Justificación</label><input type="text" id="ciNota" placeholder="p. ej. pendiente menor: rotulación / punch list" value="${esc(cur?cur.nota:'')}"></div>
+    <div id="ciPrev"></div>
+    <p class="note" style="margin-top:10px">El TXT no se modifica. El fin real se fija en el punto medio del intervalo entre cortes en que la tarea alcanzó el umbral. Todo cierre por tarea aparece en Validación y debe declararse en el informe.</p>
+    <div class="row" style="margin-top:14px">${cur?'<button class="btn ghost" id="ciDel">✕ Quitar cierre por tarea</button>':''}<span class="spacer"></span><button class="btn" data-close>Cancelar</button><button class="btn pri" id="ciOk">Guardar</button></div>`);
+  const upd=()=>{ const u=Math.max(1,Math.min(100,+$('#ciU').value||100));
+    const g=finCon(t,p.D.C,WS.cfg.umbral), n=finCon(t,p.D.C,u);
+    $('#ciSpark').innerHTML=sparkGrande(t,p.D.C,u);
+    $('#ciPrev').innerHTML=`<table class="t"><thead><tr><th></th><th>Fin real</th><th class="num">Duración real</th><th class="num">Plan</th></tr></thead><tbody>
+      <tr><td>Umbral global (${WS.cfg.umbral} %)</td><td>${g?fmtD(g.fin):'<span class="muted">en curso</span>'}</td><td class="num">${g?g.dur+' d':(t.durMin!=null?'≥ '+t.durMin+' d':'—')}</td><td class="num">${t.durPlan} d</td></tr>
+      <tr style="background:#13284280"><td><b>Cierre en ${u} %</b></td><td>${n?fmtD(n.fin):'<span class="flag warn">▲ la tarea nunca alcanzó ese avance</span>'}</td><td class="num"><b>${n?n.dur+' d':'—'}</b></td><td class="num">${t.durPlan} d</td></tr></tbody></table>`; };
+  $('#ciU').oninput=upd; upd();
+  $('#ciOk').onclick=()=>{ const u=Math.max(1,Math.min(100,+$('#ciU').value||100)); const P=WS.proyectos[key]; P.cierres=P.cierres||{};
+    if(u>=100 && !P.cierres[id]){ cerrarModal(); return; }
+    P.cierres[id]={u, nota:$('#ciNota').value.trim(), fecha:hoyLocal()}; if(u>=100) delete P.cierres[id];
+    marcarCambioDatos(); cerrarModal(); refrescar(); toast(`#${id}: cierre en ${u} % guardado.`); };
+  if($('#ciDel')) $('#ciDel').onclick=()=>{ delete WS.proyectos[key].cierres[id]; marcarCambioDatos(); cerrarModal(); refrescar(); toast(`#${id}: vuelve al umbral global.`); };
+}
+function modalCierreLote(key){
+  const p=CACHE[key]; const L=p.D.anom.filter(a=>a.tipo==='no_cierra').map(a=>p.P.tareas.find(t=>t.id===a.id)).filter(Boolean);
+  if(!L.length) return;
+  abrirModal(`<h2>Cierre por tarea en lote</h2><p class="sub">${L.length} tareas de <b>${esc(p.P.proyecto)}</b> se mantienen en 90–99 % sin llegar a 100 %. Revisa y desmarca las que realmente tengan trabajo pendiente.</p>
+    <div class="form-row"><label>Regla</label><select id="clR"><option value="max">Cerrar en el avance máximo que alcanzó cada una</option><option value="fijo">Cerrar todas en un umbral fijo</option></select></div>
+    <div class="form-row" id="clFijoRow" style="display:none"><label>Umbral fijo</label><div class="row"><input type="number" id="clU" value="95" min="50" max="99" style="width:80px"> %</div></div>
+    <div class="form-row"><label>Justificación</label><input type="text" id="clNota" value="Pendientes menores sin reportar 100 %"></div>
+    <div class="tscroll" style="max-height:300px"><table class="t"><thead><tr><th></th><th>ID</th><th>Tarea</th><th class="num">Máx</th><th class="num">Umbral</th><th class="num">Dur. resultante</th></tr></thead><tbody id="clBody"></tbody></table></div>
+    <div class="row" style="margin-top:14px"><span class="spacer"></span><button class="btn" data-close>Cancelar</button><button class="btn pri" id="clOk">Aplicar a las seleccionadas</button></div>`);
+  const off=new Set();
+  const uDe=t=>$('#clR').value==='max'?Math.floor(t.avanceMax):Math.max(50,Math.min(99,+$('#clU').value||95));
+  const upd=()=>{ $('#clFijoRow').style.display=$('#clR').value==='fijo'?'grid':'none';
+    $('#clBody').innerHTML=L.map(t=>{ const u=uDe(t), r=finCon(t,p.D.C,u); return `<tr><td><input type="checkbox" class="clChk" value="${t.id}" ${off.has(t.id)?'':'checked'}></td><td class="mono">${t.id}</td><td>${esc(trunc(t.nombre,46))}</td><td class="num">${t.avanceMax} %</td><td class="num">${u} %</td><td class="num">${r?r.dur+' d':'<span class="flag warn">no alcanza</span>'}</td></tr>`; }).join('');
+    $$('.clChk').forEach(c=>c.onchange=()=>{ c.checked?off.delete(c.value):off.add(c.value); }); };
+  $('#clR').onchange=upd; $('#clU').oninput=upd; upd();
+  $('#clOk').onclick=()=>{ const P=WS.proyectos[key]; P.cierres=P.cierres||{}; const nota=$('#clNota').value.trim(); let n=0;
+    L.forEach(t=>{ if(off.has(t.id)) return; P.cierres[t.id]={u:uDe(t), nota, fecha:hoyLocal()}; n++; });
+    marcarCambioDatos(); cerrarModal(); refrescar(); toast(`${n} cierres por tarea definidos.`); };
 }
 
 /* ---------- MODAL DE CALIBRACIÓN ---------- */
@@ -5738,6 +5996,7 @@ async function cargarArchivos(files){
 function importarMapeo(o){
   const pr=WS.proyectos[o.proyecto]; if(!pr) throw new Error(`Primero carga la Curva S de "${o.proyecto}"`);
   Object.assign(pr.mapeo, o.asignaciones||{});
+  if(o.cierres){ pr.cierres=Object.assign(pr.cierres||{}, o.cierres); if(WS.calib) WS.calib.desactualizada=true; }
 }
 function importarEspacio(o){
   const base=nuevoWS(); WS=Object.assign(base,o); WS.cfg=Object.assign(nuevoWS().cfg,o.cfg||{}); WS.ui=Object.assign(nuevoWS().ui,o.ui||{});
@@ -5794,17 +6053,20 @@ $('#mapSearch').addEventListener('input',e=>{ UIMAP.q=e.target.value; vMapeo(); 
 $('#btnRules').onclick=()=>{ const p=proyActual(); if(!p) return; const k=aplicarReglas({P:p.P,mapeo:WS.proyectos[p.key].mapeo},true); refrescar(); toast(k?`${k} tareas clasificadas por reglas.`:'No quedan tareas sin clasificar que las reglas reconozcan.'); };
 $('#btnIA').onclick=modalIA;
 $('#btnApprove').onclick=modalAprobar;
-$('#btnMapDown').onclick=()=>{ const p=proyActual(); if(!p) return; descargar(`mapeo_${slug(p.P.proyecto)}.json`,{esquema:'gp-mapeo/1', proyecto:p.P.proyecto, catalogo_version:CATALOGO_VERSION, exportado:new Date().toISOString(), asignaciones:p.mapeo}); };
+$('#btnMapDown').onclick=()=>{ const p=proyActual(); if(!p) return; descargar(`mapeo_${slug(p.P.proyecto)}.json`,{esquema:'gp-mapeo/1', proyecto:p.P.proyecto, catalogo_version:CATALOGO_VERSION, exportado:new Date().toISOString(), asignaciones:p.mapeo, cierres:p.cierres||{}}); };
 $('#btnMapUp').onclick=()=>$('#fileMap').click();
 $('#fileMap').onchange=e=>{ cargarArchivos([...e.target.files]); e.target.value=''; };
 $('#btnExpUp').onclick=()=>$('#fileExp').click();
 $('#btnCalib').onclick=modalCalibrar;
-document.addEventListener('click',e=>{ if(e.target.closest('#btnCalib2')) modalCalibrar(); if(e.target.closest('#btnCalibUndo')) deshacerCalibracion(); });
+document.addEventListener('click',e=>{ if(e.target.closest('#btnCalib2')) modalCalibrar(); if(e.target.closest('#btnCalibUndo')) deshacerCalibracion();
+  const lc=e.target.closest('.lnkCierre'); if(lc){ e.preventDefault(); e.stopPropagation(); modalCierre(lc.dataset.k, lc.dataset.id); }
+  if(e.target.closest('#btnCierreLote')){ const p=proyActual(); if(p) modalCierreLote(p.key); } }, true);
 $('#fileExp').onchange=async e=>{ const f=e.target.files[0]; if(!f) return; try{ const k=importarExperto(JSON.parse(await f.text())); MC=null; refrescar(); toast(`${k} distribuciones de criterio experto importadas.`); }catch(err){ toast('Error: '+err.message); } e.target.value=''; };
 $('#btnCatDown').onclick=()=>descargar(`catalogo_v${CATALOGO_VERSION}.json`,{esquema:'gp-catalogo/1', version:CATALOGO_VERSION, exportado:new Date().toISOString(),
   actividades:CATALOGO.map(a=>{ const d=distDe(a.id); return {codigo:a.id, actividad:a.n, fase:FASES[a.f].n, predecesoras:a.pred, descripcion:a.d, distribucion:{tipo:'triangular', min:d.min, moda:d.moda, max:d.max, fuente:d.fuente}, observado:OBS[a.id].durs}; }),
   especiales:ESPECIALES, calibracion:WS.calib});
 $('#btnMC').onclick=correrMC;
+$('#btnInforme').onclick=modalInforme;
 $('#mcStart').onchange=()=>pintarMC();
 $('#scSel').onchange=e=>{ WS.ui.esc=+e.target.value; guardar(); if(MC) correrMC(); else vRed(); };
 $('#btnScNew').onclick=()=>{ const n=prompt('Nombre del escenario:', `Escenario ${WS.escenarios.length+1}`); if(!n) return; WS.escenarios.push({nombre:n,aj:{}}); WS.ui.esc=WS.escenarios.length-1; guardar(); vRed(); };
@@ -5835,10 +6097,244 @@ $('#btnCfg').onclick=()=>{
   $('#cfOk').onclick=()=>{ WS.cfg.umbral=+$('#cfU').value; WS.cfg.curvaS=$('#cfC').value.trim(); WS.cfg.galeria=$('#cfG').value.trim(); WS.cfg.bim=$('#cfB').value.trim(); MC=null; PRON=null; cerrarModal(); refrescar(); };
 };
 
+/* =============================================================================
+   §11  VALIDACIÓN DEL MODELO (capítulo 6, validación de resultados)
+   -----------------------------------------------------------------------------
+   Unidad de validación = actividad estándar en un proyecto (no el proyecto
+   completo: ninguna Curva S cubre A1–A13 ni está cerrada).
+   Prueba 1 · Cobertura: percentil u = F(x) de la duración observada x en la
+     triangular de referencia. Calibrado ⇒ P(P10 ≤ x ≤ P90) = 0,80 y u ~ U(0,1).
+     En curso: solo se conoce x ≥ x_min ⇒ u ≥ F(x_min); cuenta como "> P90"
+     si F(x_min) > 0,90, si no queda indeterminada (se reporta cuántas).
+     Se informa la proporción con IC de Wilson al 95 % y la prueba binomial
+     exacta bilateral contra 0,80.
+   Prueba 2 · Retrospectiva: pronóstico con las series recortadas a un corte
+     anterior; percentil del fin real de cada actividad en su distribución
+     pronosticada.
+   Prueba 3 · Lógica: clasificación de cada precedencia estándar observada.
+   Definiciones de duración:
+     lapso    = fin real − inicio real de la actividad (ver §5)
+     efectiva = (t90 − t10)/0,8 sobre la curva de avance ponderada de la
+                actividad (interpolación lineal entre cortes); supone avance
+                aproximadamente lineal y descuenta arranques y cierres lentos.
+   ============================================================================= */
+const VM={sel:null, def:'lapso', ref:'base', retro:null};
+function distRef(id){ const a=ACT[id];
+  if(VM.ref==='uso') return distDe(id);
+  if(VM.ref==='experto' && WS.experto[id]){ const e=WS.experto[id]; return {min:e.min,moda:e.moda,max:e.max,fuente:'experto'}; }
+  return {min:a.prov[0], moda:a.prov[1], max:a.prov[2], fuente:'provision'}; }
+function triInv(d,p){ const {min:a,moda:c,max:b}=d, F=(c-a)/(b-a||1); return p<F ? a+Math.sqrt(p*(b-a)*(c-a)) : b-Math.sqrt((1-p)*(b-a)*(b-c)); }
+function curvaActividad(pr, id){
+  const ts=pr.P.tareas.filter(t=>pr.mapeo[t.id]&&pr.mapeo[t.id].c===id); if(!ts.length) return null;
+  const C=pr.D.C, W=ts.reduce((s,t)=>s+Math.max(t.durPlan,1),0);
+  const acc=ts.map(()=>0), A=C.map((_,i)=>{ let s=0; ts.forEach((t,k)=>{ acc[k]=Math.max(acc[k], t.serie[i]||0); s+=Math.max(t.durPlan,1)*Math.min(acc[k],100); }); return s/W; });
+  return {C, A};
+}
+function cruce(cv, nivel){ const {C,A}=cv; for(let i=0;i<A.length;i++) if(A[i]>=nivel){ if(i===0) return C[0]; const f=(nivel-A[i-1])/((A[i]-A[i-1])||1); return C[i-1]+f*(C[i]-C[i-1]); } return null; }
+function obsActividad(pr, id){
+  const g=pr.agg[id]; if(!g||!g.n) return null;
+  if(VM.def==='lapso'){ if(g.dur!=null) return {v:g.dur, cens:false}; if(g.durMin!=null) return {v:g.durMin, cens:true}; return null; }
+  const cv=curvaActividad(pr,id); if(!cv) return null; const t10=cruce(cv,10), t90=cruce(cv,90);
+  if(t10==null) return null;
+  if(t90!=null) return {v:Math.max((t90-t10)/0.8,1), cens:false};
+  return {v:Math.max((pr.D.fechaDatos-t10)/0.8,1), cens:true};
+}
+function lgam(x){ const c=[76.18009172947146,-86.50532032941677,24.01409824083091,-1.231739572450155,0.1208650973866179e-2,-0.5395239384953e-5]; let y=x, t=x+5.5; t-=(x+.5)*Math.log(t); let s=1.000000000190015; for(const k of c) s+=k/++y; return -t+Math.log(2.5066282746310005*s/x); }
+function binomP(k,n,p){ if(!n) return null; const pmf=i=>Math.exp(lgam(n+1)-lgam(i+1)-lgam(n-i+1)+i*Math.log(p)+(n-i)*Math.log(1-p)); const p0=pmf(k); let s=0; for(let i=0;i<=n;i++){ const q=pmf(i); if(q<=p0*(1+1e-9)) s+=q; } return Math.min(1,s); }
+function wilson(k,n,z=1.96){ if(!n) return [null,null]; const p=k/n, d=1+z*z/n, c=(p+z*z/(2*n))/d, h=z*Math.sqrt(p*(1-p)/n+z*z/(4*n*n))/d; return [Math.max(0,c-h), Math.min(1,c+h)]; }
+function calcVal(){
+  const keys=(VM.sel||[]).filter(k=>CACHE[k]); const filas=[];
+  for(const k of keys){ const pr=CACHE[k];
+    for(const a of CATALOGO){ const o=obsActividad(pr,a.id); if(!o) continue; const d=distRef(a.id), u=triCdf(d,o.v);
+      let clase; if(!o.cens) clase = u<0.1?'bajo':(u>0.9?'alto':'dentro'); else clase = u>0.9?'alto':'indet';
+      filas.push({k, proy:pr.P.proyecto, id:a.id, v:o.v, cens:o.cens, u, d, clase, ratio:o.v/d.moda}); } }
+  const dec=filas.filter(f=>f.clase!=='indet'), dentro=dec.filter(f=>f.clase==='dentro').length, alto=dec.filter(f=>f.clase==='alto').length, bajo=dec.filter(f=>f.clase==='bajo').length;
+  const term=filas.filter(f=>!f.cens), gm=term.length?Math.exp(term.reduce((s,f)=>s+Math.log(f.ratio),0)/term.length):null;
+  return {keys, filas, n:dec.length, dentro, alto, bajo, indet:filas.length-dec.length, ic:wilson(dentro,dec.length), p:binomP(dentro,dec.length,0.8),
+    uMed:term.length?median(term.map(f=>f.u)):null, gm};
+}
+const FF="'Times New Roman', 'DejaVu Serif', Georgia, serif";
+function figPercentiles(filas, o={}){
+  const acts=CATALOGO.filter(a=>filas.some(f=>f.id===a.id)); const proys=[...new Set(filas.map(f=>f.proy))];
+  const W=900, rowH=30, mT=62, mB=60, mL=300, mR=40, H=mT+mB+Math.max(1,acts.length)*rowH, pw=W-mL-mR;
+  const X=u=>mL+u*pw, sh=['circle','square','diamond','triangle','cross'];
+  const mark=(t,x,y)=>{ const r=6; if(t==='circle') return `<circle cx="${x}" cy="${y}" r="${r}" fill="#222"/>`;
+    if(t==='square') return `<rect x="${x-r}" y="${y-r}" width="${2*r}" height="${2*r}" fill="#fff" stroke="#222" stroke-width="1.6"/>`;
+    if(t==='diamond') return `<path d="M${x} ${y-r-1}L${x+r+1} ${y}L${x} ${y+r+1}L${x-r-1} ${y}Z" fill="#888" stroke="#222" stroke-width="1"/>`;
+    if(t==='triangle') return `<path d="M${x} ${y-r-1}L${x+r+1} ${y+r}L${x-r-1} ${y+r}Z" fill="#fff" stroke="#222" stroke-width="1.6"/>`;
+    return `<path d="M${x-r} ${y-r}L${x+r} ${y+r}M${x-r} ${y+r}L${x+r} ${y-r}" stroke="#222" stroke-width="2"/>`; };
+  let s=`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="${FF}" font-size="14" fill="#222"><rect width="${W}" height="${H}" fill="#fff"/>
+  <rect x="${X(.1)}" y="${mT}" width="${X(.9)-X(.1)}" height="${H-mT-mB}" fill="#ececec"/>
+  <text x="${(X(.1)+X(.9))/2}" y="${mT-8}" text-anchor="middle" font-size="13" fill="#555">intervalo P10–P90 de la distribución de referencia</text>`;
+  [0,.1,.25,.5,.75,.9,1].forEach(u=>{ s+=`<line x1="${X(u)}" x2="${X(u)}" y1="${mT}" y2="${H-mB}" stroke="${u===.5?'#999':'#d0d0d0'}" ${u===.5?'stroke-dasharray="4 3"':''}/><text x="${X(u)}" y="${H-mB+20}" text-anchor="middle">${Math.round(u*100)}</text>`; });
+  s+=`<text x="${mL+pw/2}" y="${H-16}" text-anchor="middle" font-size="15">Percentil de la duración observada en la distribución de referencia (%)</text>`;
+  acts.forEach((a,k)=>{ const y=mT+k*rowH+rowH/2; s+=`<line x1="${mL}" x2="${mL+pw}" y1="${y}" y2="${y}" stroke="#e4e4e4"/><text x="${mL-12}" y="${y+5}" text-anchor="end">${a.id} ${esc(a.n.length>34?a.corto:a.n)}</text>`;
+    filas.filter(f=>f.id===a.id).forEach(f=>{ const j=proys.indexOf(f.proy), off=(j-(proys.length-1)/2)*Math.min(7,20/proys.length), x=X(Math.min(f.u,1)), yy=y+off;
+      if(f.cens) s+=`<path d="M${x} ${yy}H${Math.min(X(1),x+26)}" stroke="#222" stroke-width="1.4"/><path d="M${Math.min(X(1),x+26)} ${yy-4}l7 4l-7 4z" fill="#222"/>`;
+      s+=mark(sh[j%sh.length],x,yy); }); });
+  s+=`<rect x="${mL}" y="${mT}" width="${pw}" height="${H-mT-mB}" fill="none" stroke="#888"/>`;
+  // leyenda
+  let lx=20; const ly=22; proys.forEach((p,j)=>{ s+=mark(sh[j%sh.length],lx+6,ly-4)+`<text x="${lx+18}" y="${ly+1}" font-size="13">${esc(p)}</text>`; lx+=36+p.length*7.2; });
+  if(filas.some(f=>f.cens)) s+=`<path d="M${lx} ${ly-4}H${lx+20}" stroke="#222" stroke-width="1.4"/><path d="M${lx+20} ${ly-8}l7 4l-7 4z" fill="#222"/><text x="${lx+32}" y="${ly+1}" font-size="13">en curso (límite inferior)</text>`;
+  return {svg:s+'</svg>', W, H};
+}
+function figPIT(filas){
+  const us=filas.filter(f=>!f.cens).map(f=>Math.min(f.u,0.999999)); const W=900,H=420,mL=70,mR=30,mT=24,mB=60,pw=W-mL-mR,ph=H-mT-mB;
+  const cnt=new Array(10).fill(0); us.forEach(u=>cnt[Math.floor(u*10)]++); const n=us.length, esp=n/10, ymax=Math.max(1,Math.ceil(Math.max(esp,...cnt)*1.15));
+  const Y=c=>mT+ph-c/ymax*ph, bw=pw/10; const yt=pasoBonito(ymax/6);
+  let s=`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="${FF}" font-size="14" fill="#222"><rect width="${W}" height="${H}" fill="#fff"/>`;
+  for(let c=0;c<=ymax+1e-9;c+=yt){ s+=`<line x1="${mL}" x2="${mL+pw}" y1="${Y(c)}" y2="${Y(c)}" stroke="#e2e2e2"/><text x="${mL-8}" y="${Y(c)+5}" text-anchor="end">${nf(c,c%1?1:0)}</text>`; }
+  cnt.forEach((c,i)=>{ s+=`<rect x="${mL+i*bw+2}" y="${Y(c)}" width="${bw-4}" height="${mT+ph-Y(c)}" fill="${i===0||i===9?'#9a9a9a':'#d6d6d6'}" stroke="#777" stroke-width=".8"/>${c?`<text x="${mL+i*bw+bw/2}" y="${Y(c)-6}" text-anchor="middle" font-size="13">${c}</text>`:''}`; });
+  s+=`<line x1="${mL}" x2="${mL+pw}" y1="${Y(esp)}" y2="${Y(esp)}" stroke="#222" stroke-width="1.6" stroke-dasharray="7 4"/><text x="${mL+pw-4}" y="${Y(esp)-7}" text-anchor="end" font-size="13" stroke="#fff" stroke-width="4" paint-order="stroke">frecuencia esperada si el modelo está calibrado (${nf(esp,1)})</text>`;
+  for(let i=0;i<=10;i++) s+=`<text x="${mL+i*bw}" y="${mT+ph+20}" text-anchor="middle">${i*10}</text>`;
+  s+=`<rect x="${mL}" y="${mT}" width="${pw}" height="${ph}" fill="none" stroke="#888"/>
+  <text x="${mL+pw/2}" y="${H-14}" text-anchor="middle" font-size="15">Percentil de la duración observada (%) · actividades terminadas, n = ${n}</text>
+  <text transform="translate(20 ${mT+ph/2}) rotate(-90)" text-anchor="middle" font-size="15">Número de actividades</text>`;
+  return {svg:s+'</svg>', W, H};
+}
+function svgAPng(svg,W,H,esc_){ return new Promise((ok,ko)=>{ const img=new Image(); const url=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'}));
+  img.onload=()=>{ const c=document.createElement('canvas'); c.width=W*esc_; c.height=H*esc_; const x=c.getContext('2d'); x.fillStyle='#fff'; x.fillRect(0,0,c.width,c.height); x.drawImage(img,0,0,c.width,c.height); URL.revokeObjectURL(url); c.toBlob(b=>b?ok(b):ko(new Error('PNG')),'image/png'); };
+  img.onerror=()=>ko(new Error('No se pudo rasterizar')); img.src=url; }); }
+function bajarBlob(blob,n){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=n; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},500); }
+function modalFigura({titulo, G, nombre, pie}){
+  abrirModal(`<h2>${esc(titulo)}</h2><p class="sub">Figura en estilo de publicación. El título va en el pie de figura del informe.</p>
+    <div class="figinf" style="background:#fff;border-radius:8px;padding:6px">${G.svg.replace('<svg ','<svg style="width:100%;height:auto;display:block" ')}</div>
+    ${pie?`<div class="note" style="margin-top:10px"><b>Pie de figura sugerido:</b> <span id="mfCap">${esc(pie)}</span> <button class="btn sm ghost" id="mfCapCp">⧉ Copiar</button></div>`:''}
+    <div class="row" style="margin-top:14px"><span class="spacer"></span><button class="btn" id="mfSvg">⇩ SVG</button><button class="btn" id="mfPng">⇩ PNG (300 ppp)</button><button class="btn pri" id="mfCopy">⧉ Copiar imagen</button><button class="btn" data-close>Cerrar</button></div>`);
+  $('#mfSvg').onclick=()=>bajarBlob(new Blob([G.svg],{type:'image/svg+xml'}), nombre+'.svg');
+  $('#mfPng').onclick=async()=>{ try{ bajarBlob(await svgAPng(G.svg,G.W,G.H,3.33), nombre+'.png'); }catch(e){ toast(e.message); } };
+  $('#mfCopy').onclick=async()=>{ try{ const b=await svgAPng(G.svg,G.W,G.H,3.33); await navigator.clipboard.write([new ClipboardItem({'image/png':b})]); toast('Imagen copiada: pégala en Word.'); }catch(e){ toast('El navegador no permitió copiar; usa «PNG».'); } };
+  if($('#mfCapCp')) $('#mfCapCp').onclick=async()=>{ try{ await navigator.clipboard.writeText(pie); toast('Pie de figura copiado.'); }catch(e){} };
+}
+async function copiarTabla(cab, filas, nombre){
+  const html=`<table border="1" cellspacing="0" cellpadding="4" style="border-collapse:collapse;font-family:'Times New Roman',serif;font-size:10pt"><thead><tr>${cab.map(c=>`<th style="background:#e8e8e8">${esc(c)}</th>`).join('')}</tr></thead><tbody>${filas.map(r=>`<tr>${r.map(c=>`<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+  const tsv=[cab,...filas].map(r=>r.join('\t')).join('\n');
+  try{ await navigator.clipboard.write([new ClipboardItem({'text/html':new Blob([html],{type:'text/html'}),'text/plain':new Blob([tsv],{type:'text/plain'})})]); toast('Tabla copiada: pégala en Word o Excel.'); }
+  catch(e){ bajarBlob(new Blob(['﻿'+[cab,...filas].map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(';')).join('\n')],{type:'text/csv'}), nombre+'.csv'); toast('Portapapeles bloqueado: se descargó CSV.'); }
+}
+const pctTxt=u=>u==null?'—':(u>=0.995?'>99':(u<0.005?'<1':nf(u*100)));
+function colorPct(u){ if(u==null) return 'transparent'; const t=Math.max(-1,Math.min(1,(u-0.5)/0.5)); const a=Math.abs(t)**1.3*0.75; return t<0?`rgba(57,135,229,${a})`:`rgba(230,103,103,${a})`; }
+const DEFTXT={lapso:'Del primer avance de cualquier tarea al cierre de la última. Incluye esperas y cierres lentos: mide el plazo calendario.',
+  efectiva:'Tiempo para pasar de 10 % a 90 % de avance ponderado, escalado a 100 %. Descuenta arranques y cierres lentos; supone avance ≈ lineal.'};
+function vValMod(){
+  const ks=Object.keys(CACHE).sort(); if(!VM.sel) VM.sel=[...ks]; VM.sel=VM.sel.filter(k=>CACHE[k]);
+  $('#vmProys').innerHTML=ks.length?ks.map(k=>`<span class="chip vmP ${VM.sel.includes(k)?'on':''}" data-k="${esc(k)}">${esc(CACHE[k].P.proyecto)}</span>`).join(''):'<span class="muted">Sin Curvas S cargadas</span>';
+  $('#vmDef').value=VM.def; $('#vmRef').value=VM.ref; $('#vmDefTxt').textContent=DEFTXT[VM.def];
+  const circ = VM.ref==='uso' && WS.calib && WS.calib.proyectos.some(n=>VM.sel.some(k=>CACHE[k].P.proyecto===n));
+  $('#vmRefWarn').innerHTML = circ?`<div class="flag warn" style="margin-top:6px">▲ Hay distribuciones calibradas con estas mismas curvas: la prueba no es independiente.</div>`:'';
+  const R=calcVal(); VM.R=R;
+  const okCob = R.ic[0]!=null && R.ic[0]<=0.8 && R.ic[1]>=0.8;
+  $('#vmKpis').innerHTML = `
+    <div class="kpi"><div class="v">${R.filas.length}</div><div class="l">Observaciones (actividad × proyecto)</div></div>
+    <div class="kpi hl"><div class="v">${R.n?nf(100*R.dentro/R.n):'—'}<small> %</small></div><div class="l">Dentro de P10–P90 (esperado 80 %) · IC95 ${R.n?nf(100*R.ic[0])+'–'+nf(100*R.ic[1])+' %':'—'}</div></div>
+    <div class="kpi"><div class="v">${R.alto}<small> / ${R.n}</small></div><div class="l">Sobre P90 (esperado ${R.n?nf(R.n*0.1,1):'—'})</div></div>
+    <div class="kpi"><div class="v">${R.bajo}<small> / ${R.n}</small></div><div class="l">Bajo P10 (esperado ${R.n?nf(R.n*0.1,1):'—'})</div></div>
+    <div class="kpi"><div class="v">${R.p!=null?(R.p<0.001?'<0,001':nf(R.p,3)):'—'}</div><div class="l">p binomial vs 0,80 ${R.p!=null?(R.p<0.05?'<span class="flag crit">● se rechaza</span>':'<span class="flag ok">✓ no se rechaza</span>'):''}</div></div>
+    <div class="kpi"><div class="v">${R.gm?nf(R.gm,2):'—'}<small> ×</small></div><div class="l">Real / moda (media geométrica, terminadas)</div></div>`;
+  if(!R.filas.length){ $('#vmFig1').innerHTML='<div class="empty" style="color:#555">Sin actividades con avance en las curvas seleccionadas.</div>'; $('#vmFig2').innerHTML=''; $('#vmTab1').innerHTML=''; }
+  else {
+    $('#vmFig1').innerHTML=figPercentiles(R.filas).svg.replace('<svg ','<svg style="width:100%;height:auto;display:block" ');
+    $('#vmFig2').innerHTML=R.filas.some(f=>!f.cens)?figPIT(R.filas).svg.replace('<svg ','<svg style="width:100%;height:auto;display:block" '):'<div class="empty" style="color:#555">Sin actividades terminadas.</div>';
+    const proys=R.keys.map(k=>CACHE[k].P.proyecto), acts=CATALOGO.filter(a=>R.filas.some(f=>f.id===a.id));
+    $('#vmTab1').innerHTML=`<table class="t"><thead><tr><th>Actividad</th><th class="num">Ref. a / m / b</th>${proys.map(p=>`<th class="num">${esc(trunc(p,22))}<div style="font-weight:400;text-transform:none;letter-spacing:0">días · percentil</div></th>`).join('')}</tr></thead><tbody>${
+      acts.map(a=>{ const d=distRef(a.id); return `<tr><td><span class="code" style="color:${colorAct(a.id)}">${a.id}</span> ${esc(a.corto)}</td><td class="num">${nf(d.min)} / ${nf(d.moda)} / ${nf(d.max)}</td>${
+        R.keys.map(k=>{ const f=R.filas.find(x=>x.k===k&&x.id===a.id); return f?`<td class="num">${f.cens?'≥':''}${nf(f.v)} <span class="pc" style="background:${colorPct(f.u)}">${f.cens?'≥':''}${pctTxt(f.u)}</span></td>`:'<td class="num muted">·</td>'; }).join('')}</tr>`; }).join('')}</tbody></table>
+      <p class="muted" style="font-size:11.5px;margin:8px 0 0">${R.indet} observación(es) en curso sin conclusión (aún bajo P90) no entran a la proporción. Color: azul = más rápido que la referencia, rojo = más lento.</p>`;
+  }
+  // retrospectiva: selectores
+  const rp=$('#vmRP'); const prevK=rp.value; rp.innerHTML=VM.sel.map(k=>`<option value="${esc(k)}">${esc(CACHE[k].P.proyecto)}</option>`).join(''); if(VM.sel.includes(prevK)) rp.value=prevK;
+  const pr=CACHE[rp.value]; const rc=$('#vmRC'); const prevC=rc.value;
+  rc.innerHTML = pr? pr.P.cortes.slice(0,-1).map((c,i)=>`<option value="${i}">${fmtD(c)}</option>`).join('') : '';
+  if(pr){ rc.value = prevC && +prevC < pr.P.cortes.length-1 ? prevC : String(Math.floor((pr.P.cortes.length-1)/2)); }
+  pintarRetro(); pintarLogica();
+}
+function correrRetro(){
+  const k=$('#vmRP').value, ic=+$('#vmRC').value, full=CACHE[k]; if(!full) return;
+  const cut=proyectoAlCorte(full, ic);
+  const r=pronostico(cut,{N:Math.max(2000,Math.min(20000,+$('#mcN').value||20000)), seed:+$('#mcSeed').value||1, tipo:$('#mcTipo').value, distFn:distRef});
+  const filas=[];
+  if(r) for(const id of r.ids){ const gc=cut.agg[id], gf=full.agg[id]; if(gc.estado==='terminada' || !gf || gf.fin==null) continue;
+    const s=r.act[id].sorted; let a=0,b=s.length; while(a<b){ const m=(a+b)>>1; if(s[m]<=gf.fin) a=m+1; else b=m; } const u=a/s.length;
+    filas.push({id, estado:gc.estado, avance:gc.avance, fin:gf.fin, p10:quantSorted(s,.1), p50:quantSorted(s,.5), p80:quantSorted(s,.8), p90:quantSorted(s,.9), u}); }
+  VM.retro={k, ic, corte:full.P.cortes[ic], proy:full.P.proyecto, filas, N:r?r.N:0};
+  pintarRetro();
+}
+function pintarRetro(){
+  const V=VM.retro, el=$('#vmRetro');
+  if(!V || !CACHE[V.k] || !VM.sel.includes(V.k)){ el.innerHTML='<div class="empty">Elige proyecto y fecha de corte, y pulsa «Ejecutar».</div>'; return; }
+  if(!V.filas.length){ el.innerHTML=`<div class="empty">Con corte al ${fmtD(V.corte)} no hay actividades que terminaran después del corte en ${esc(V.proy)}. Prueba un corte anterior.</div>`; return; }
+  const dentro=V.filas.filter(f=>f.u>=0.1&&f.u<=0.9).length;
+  el.innerHTML=`<div class="kpis" style="margin-bottom:10px"><div class="kpi"><div class="v" style="font-size:17px">${fmtD(V.corte)}</div><div class="l">Fecha de datos simulada · ${esc(V.proy)}</div></div>
+    <div class="kpi"><div class="v">${V.filas.length}</div><div class="l">Actividades que cerraron después</div></div>
+    <div class="kpi hl"><div class="v">${dentro}<small> / ${V.filas.length}</small></div><div class="l">Fin real dentro de P10–P90 del pronóstico</div></div>
+    <div class="kpi"><div class="v">${nf(median(V.filas.map(f=>f.u))*100)}</div><div class="l">Percentil mediano del fin real</div></div></div>
+    <table class="t"><thead><tr><th>Actividad</th><th>Estado al corte</th><th class="num">Fin P10</th><th class="num">Fin P50</th><th class="num">Fin P90</th><th class="num">Fin real</th><th class="num">Percentil</th></tr></thead><tbody>${
+    V.filas.map(f=>`<tr><td><span class="code" style="color:${colorAct(f.id)}">${f.id}</span> ${esc(ACT[f.id].corto)}</td><td>${f.estado==='en curso'?`en curso · ${Math.floor(f.avance)} %`:'pendiente'}</td>
+      <td class="num">${fmtDs(Math.round(f.p10))}</td><td class="num">${fmtDs(Math.round(f.p50))}</td><td class="num">${fmtDs(Math.round(f.p90))}</td><td class="num"><b>${fmtDs(f.fin)}</b></td><td class="num"><span class="pc" style="background:${colorPct(f.u)}">${pctTxt(f.u)}</span></td></tr>`).join('')}</tbody></table>`;
+}
+function datosLogica(){
+  const filas=[];
+  for(const k of VM.sel){ const pr=CACHE[k]; if(!pr) continue;
+    for(const s of CATALOGO) for(const p of s.pred){ const gp=pr.agg[p], gs=pr.agg[s.id]; if(!gp||!gp.n||!gs||!gs.n||gp.ini==null||gs.ini==null) continue;
+      let c; if(gp.fin!=null && gs.ini>=gp.fin) c='respetada'; else if(gp.fin!=null && gs.fin!=null && gs.fin<gp.fin) c='inversión'; else if(gp.fin==null && gs.fin!=null) c='inversión'; else c='solape';
+      const sol = gp.fin!=null ? Math.max(0, gp.fin-gs.ini) : Math.max(0, pr.D.fechaDatos-gs.ini);
+      filas.push({proy:pr.P.proyecto, p, s:s.id, c, sol, pFin:gp.fin, sFin:gs.fin, sIni:gs.ini}); } }
+  return filas;
+}
+function pintarLogica(){
+  const F=datosLogica(); if(!F.length){ $('#vmLog').innerHTML='<div class="empty">Sin pares de actividades con fechas reales.</div>'; return; }
+  const cnt=c=>F.filter(f=>f.c===c).length;
+  $('#vmLog').innerHTML=`<div class="legend" style="margin-bottom:10px"><span><span class="badge b-ok">✓ respetada</span> ${cnt('respetada')}</span><span><span class="badge b-info">⇉ solape</span> ${cnt('solape')}</span><span><span class="badge b-crit">● inversión</span> ${cnt('inversión')}</span><span class="muted">de ${F.length} precedencias observadas</span></div>
+    <table class="t"><thead><tr><th>Proyecto</th><th>Precedencia</th><th>Resultado</th><th class="num">Solape (d)</th><th>Detalle</th></tr></thead><tbody>${
+    F.map(f=>`<tr><td>${esc(trunc(f.proy,24))}</td><td><span class="code" style="color:${colorAct(f.p)}">${f.p}</span> → <span class="code" style="color:${colorAct(f.s)}">${f.s}</span> <span class="muted">${esc(ACT[f.p].corto)} → ${esc(ACT[f.s].corto)}</span></td>
+      <td>${f.c==='respetada'?'<span class="badge b-ok">✓ respetada</span>':(f.c==='solape'?'<span class="badge b-info">⇉ solape</span>':'<span class="badge b-crit">● inversión</span>')}</td><td class="num">${f.c==='respetada'?'—':nf(f.sol)}</td>
+      <td style="font-size:11.5px" class="ink2">${f.c==='inversión'?`${f.s} cerró ${fmtDs(f.sFin)}; ${f.p} ${f.pFin!=null?'cerró '+fmtDs(f.pFin):'sigue abierta'}`:(f.c==='solape'?`${f.s} inició ${fmtDs(f.sIni)}, antes del cierre de ${f.p}`:'')}</td></tr>`).join('')}</tbody></table>`;
+}
+document.addEventListener('click',e=>{
+  const c=e.target.closest('.vmP'); if(c){ const k=c.dataset.k; VM.sel=VM.sel.includes(k)?VM.sel.filter(x=>x!==k):[...VM.sel,k]; vValMod(); return; }
+  if(e.target.closest('#vmClaro')){ const v=$('#v-valmod'); v.classList.toggle('claro'); $('#vmClaro').textContent=v.classList.contains('claro')?'◑ Vista oscura':'◐ Vista clara para captura'; return; }
+  if(e.target.closest('#vmRGo')){ correrRetro(); return; }
+  if(e.target.closest('#vmF1')){ const R=VM.R; if(!R||!R.filas.length) return toast('Sin datos.');
+    modalFigura({titulo:'Cobertura de las distribuciones', G:figPercentiles(R.filas), nombre:'fig_validacion_cobertura',
+      pie:`Percentil de la duración real de cada actividad estándar (${VM.def==='lapso'?'lapso calendario':'duración efectiva 10–90 %'}) dentro de su distribución de referencia (${VM.ref==='base'?'Tabla 38':FUENTES[VM.ref]||VM.ref}). Curvas S: ${R.keys.map(k=>CACHE[k].P.proyecto).join(', ')}. Dentro de P10–P90: ${R.dentro} de ${R.n} (${R.n?nf(100*R.dentro/R.n):'—'} %; esperado 80 %).`}); return; }
+  if(e.target.closest('#vmF2')){ const R=VM.R; if(!R||!R.filas.some(f=>!f.cens)) return toast('Sin actividades terminadas.');
+    modalFigura({titulo:'Histograma de percentiles', G:figPIT(R.filas), nombre:'fig_validacion_pit',
+      pie:`Distribución de los percentiles de las duraciones reales terminadas (n = ${R.filas.filter(f=>!f.cens).length}) en la distribución de referencia. Un modelo calibrado produce una distribución uniforme; la acumulación en la clase 90–100 indica subestimación.`}); return; }
+  if(e.target.closest('#vmF3')){ const V=VM.retro; if(!V||!V.filas.length) return toast('Ejecuta la prueba retrospectiva primero.');
+    const filas=V.filas.map(f=>({proy:V.proy, id:f.id, u:f.u, cens:false}));
+    modalFigura({titulo:'Pronóstico retrospectivo', G:figPercentiles(filas), nombre:'fig_validacion_retrospectiva',
+      pie:`Percentil de la fecha real de fin de cada actividad dentro del pronóstico emitido con datos al ${fmtD(V.corte)} (${V.proy}; ${nf(V.N)} iteraciones).`}); return; }
+  if(e.target.closest('#vmT1')){ const R=VM.R; if(!R) return; const acts=CATALOGO.filter(a=>R.filas.some(f=>f.id===a.id));
+    copiarTabla(['Actividad','Referencia a / m / b (d)',...R.keys.map(k=>CACHE[k].P.proyecto+' (d · percentil)')],
+      acts.map(a=>{ const d=distRef(a.id); return [a.id+' '+a.n, `${nf(d.min)} / ${nf(d.moda)} / ${nf(d.max)}`, ...R.keys.map(k=>{ const f=R.filas.find(x=>x.k===k&&x.id===a.id); return f?`${f.cens?'≥ ':''}${nf(f.v)} · ${f.cens?'≥ ':''}${pctTxt(f.u)}`:'—'; })]; }), 'tabla_validacion_cobertura'); return; }
+  if(e.target.closest('#vmT2')){ const V=VM.retro; if(!V||!V.filas.length) return;
+    copiarTabla(['Actividad','Estado al corte','Fin P10','Fin P50','Fin P90','Fin real','Percentil'], V.filas.map(f=>[f.id+' '+ACT[f.id].n, f.estado==='en curso'?`en curso (${Math.floor(f.avance)} %)`:'pendiente', fmtD(Math.round(f.p10)), fmtD(Math.round(f.p50)), fmtD(Math.round(f.p90)), fmtD(f.fin), pctTxt(f.u)]), 'tabla_validacion_retrospectiva'); return; }
+  if(e.target.closest('#vmT3')){ const F=datosLogica(); copiarTabla(['Proyecto','Precedencia','Resultado','Solape (d)'], F.map(f=>[f.proy, `${f.p} → ${f.s}`, f.c, f.c==='respetada'?'—':nf(f.sol)]), 'tabla_validacion_logica'); return; }
+});
+document.addEventListener('change',e=>{
+  if(e.target.id==='vmDef'){ VM.def=e.target.value; vValMod(); }
+  if(e.target.id==='vmRef'){ VM.ref=e.target.value; VM.retro=null; vValMod(); }
+  if(e.target.id==='vmRP'){ VM.retro=null; vValMod(); }
+});
+
 /* ---------- arranque ---------- */
+/* Al cambiar la versión del catálogo, las sugerencias de REGLAS no aprobadas se
+   recalculan (p. ej. "Sistemas eléctricos Shellter" pasa de A14 a A15). Lo
+   aprobado o asignado manualmente/por IA no se toca. */
+function migrarCatalogo(){
+  if(WS.catVer===CATALOGO_VERSION) return; let k=0;
+  for(const v of Object.values(WS.proyectos)){ try{ const P=parseCurvaS(v.txt);
+    for(const t of P.tareas){ const m=v.mapeo[t.id]; if(m && (m.o!=='reglas' || m.e==='aprobado')) continue;
+      const sg=sugerirPorReglas(t); if(sg && (!m || m.c!==sg.c)){ v.mapeo[t.id]={c:sg.c, o:'reglas', f:sg.f, e:'sugerido', j:'Regla: '+sg.j.replace(/^Regla: /,''), n:t.nombre}; k++; } } }catch(e){} }
+  Object.keys(WS.fuente).forEach(id=>{ if(!ACT[id]) delete WS.fuente[id]; });
+  if(WS.catVer && WS.calib) WS.calib.desactualizada=true;
+  const habia=!!WS.catVer; WS.catVer=CATALOGO_VERSION;
+  if(habia) setTimeout(()=>toast(`Catálogo actualizado a v${CATALOGO_VERSION} (15 actividades, base Tabla 38)${k?` · ${k} sugerencias de reglas reclasificadas`:''}.`),600);
+}
 function cargarMuestra(){ const el=$('#muestra-tecales'); const txt=el?el.textContent.trim():''; if(txt && !txt.startsWith('/*')) registrarTXT(txt,'20260929_CurvaS_PS Los Tecales.txt (muestra)'); }
 (function init(){
   if(!cargarWS() || !Object.keys(WS.proyectos).length) cargarMuestra();
+  migrarCatalogo();
   const q=new URLSearchParams(location.search).get('proyecto');
   if(q){ const k=Object.keys(WS.proyectos).find(n=>slug(n)===q||n===q); if(k) WS.ui.proy=k; }
   refrescar();
