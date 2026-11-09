@@ -9,7 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <!--
   =============================================================================
-   GEMELO DE PROCESO · Desarrollo de subestaciones (ICE)            versión 2.4.1
+   GEMELO DE PROCESO · Desarrollo de subestaciones (ICE)            versión 2.5
   -----------------------------------------------------------------------------
    Prototipo del Capítulo 6 (Objetivo 3). Archivo único, sin servidor.
 
@@ -394,6 +394,13 @@ textarea{width:100%;min-height:150px;font-family:'IBM Plex Mono',monospace;font-
       <div class="grid g2">
         <div class="card"><h3>Fecha de terminación pronosticada</h3><p class="sub" id="pronSub"></p><div id="pronCdf"></div></div>
         <div class="card"><h3>Estado por actividad estándar</h3><p class="sub">Según la fecha de datos elegida. En prueba retrospectiva se añade el fin que realmente ocurrió.</p><div id="pronTable"></div></div>
+      </div>
+      <div class="card" style="margin-top:14px">
+        <div class="row"><h3 style="margin:0">Evolución del pronóstico por actualización de datos</h3><span class="spacer"></span>
+          <label class="muted"><input type="checkbox" id="evBanda" checked> Banda P10–P90</label>
+          <button class="btn sm pri" id="evGo">▶ Calcular evolución</button><button class="btn sm" id="evFig">⎙ Figura</button><button class="btn sm ghost" id="evTab">⧉ Copiar tabla</button></div>
+        <p class="sub">Se repite el pronóstico con los datos disponibles en cada corte del TXT (misma semilla y distribuciones) y se grafica cómo cambió la fecha de terminación P50 y P80 en cada actualización.</p>
+        <div id="evBody"><div class="empty">Pulsa «Calcular evolución».</div></div>
       </div>
     </section>
     <!-- ======================= VALIDACIÓN DEL MODELO ======================= -->
@@ -5253,7 +5260,7 @@ function refrescar(){
   render();
 }
 function render(){
-  ({cartera:vCartera, mapeo:vMapeo, validacion:vValidacion, dist:vDist, red:vRed, pron:vPron, valmod:vValMod})[VISTA]();
+  ({cartera:vCartera, mapeo:vMapeo, validacion:vValidacion, dist:vDist, red:vRed, pron:()=>{vPron(); pintarEvolucion();}, valmod:vValMod})[VISTA]();
 }
 function irA(v){ VISTA=v; $$('#rail button').forEach(b=>b.classList.toggle('on',b.dataset.v===v)); $$('.view').forEach(s=>s.classList.toggle('on', s.id==='v-'+v)); $('#main').scrollTop=0; render(); }
 
@@ -5967,6 +5974,90 @@ function correrPron(){
   const r=pronostico(proyectoAlCorte(full,ic),{N:Math.max(500,+$('#mcN').value||5000), seed:+$('#mcSeed').value||1, tipo:$('#mcTipo').value});
   PRON={key:full.key, ic, r}; vPron();
 }
+
+/* ---------- EVOLUCIÓN DEL PRONÓSTICO ----------------------------------------
+   Para cada corte k del TXT: se recorta el proyecto a ese corte (proyectoAlCorte)
+   y se pronostica con la MISMA semilla, iteraciones y fuente de distribuciones.
+   La serie (fecha de datos, P10, P50, P80, P90) muestra cómo fue cambiando la
+   proyección de la fecha de terminación en cada actualización.
+------------------------------------------------------------------------------ */
+let EVO=null;
+async function correrEvolucion(){
+  const full=proyActual(); if(!full) return;
+  const N=Math.min(5000, Math.max(1000, +$('#mcN').value||5000)), seed=+$('#mcSeed').value||1, tipo=$('#mcTipo').value;
+  const nc=full.P.cortes.length, filas=[];
+  $('#evBody').innerHTML='<div class="empty">Calculando… <span id="evProg">0</span> / '+nc+'</div>';
+  for(let k=0;k<nc;k++){
+    const cut=proyectoAlCorte(full,k), r=pronostico(cut,{N,seed,tipo});
+    if(r){ const av=avanceProyecto(cut); filas.push({k, corte:cut.D.fechaDatos, avance:av, p10:r.p(.1), p50:r.p(.5), p80:r.p(.8), p90:r.p(.9), pPlan:r.pPlan}); }
+    if(k%4===3){ const e=$('#evProg'); if(e) e.textContent=k+1; await new Promise(z=>setTimeout(z,0)); }
+  }
+  EVO={key:full.key, proy:full.P.proyecto, N, seed, tipo, filas, plan:full.P.FF?toDay(full.P.FF):null, real:finRealSubred(full)};
+  pintarEvolucion();
+}
+function svgEvolucion(E, o={}){
+  const F=E.filas, W=900, H=540, mL=78, mR=150, mT=52, mB=62, pw=W-mL-mR, ph=H-mT-mB, fs=o.fs||14;
+  const xs=F.map(f=>f.corte), ys=F.flatMap(f=>o.banda?[f.p10,f.p90]:[f.p50,f.p80]);
+  if(E.plan!=null) ys.push(E.plan); if(E.real!=null) ys.push(E.real);
+  const x0=Math.min(...xs)-3, x1=Math.max(...xs)+3, y0=Math.min(...ys)-7, y1=Math.max(...ys)+7;
+  const X=d=>mL+(d-x0)/(x1-x0)*pw, Y=d=>mT+ph-(d-y0)/(y1-y0)*ph;
+  const meses=(a,b)=>{ const r=[]; let m=new Date(a*DAY); m=new Date(Date.UTC(m.getUTCFullYear(),m.getUTCMonth()+1,1)); while(m.getTime()/DAY<=b){ r.push(m.getTime()/DAY); m=new Date(Date.UTC(m.getUTCFullYear(),m.getUTCMonth()+1,1)); } return r; };
+  const lbl=d=>{ const s=fromDay(d); return MESES[+s.slice(5,7)-1]+' '+s.slice(2,4); };
+  const ink='#222', halo='stroke="#fff" stroke-width="4" stroke-linejoin="round" paint-order="stroke"';
+  let s=`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="${FF}" font-size="${fs}" fill="${ink}"><rect width="${W}" height="${H}" fill="#fff"/>`;
+  meses(y0,y1).forEach(d=>{ s+=`<line x1="${mL}" x2="${mL+pw}" y1="${Y(d)}" y2="${Y(d)}" stroke="#e4e4e4"/><text x="${mL-8}" y="${Y(d)+5}" text-anchor="end">${lbl(d)}</text>`; });
+  meses(x0,x1).forEach(d=>{ s+=`<line x1="${X(d)}" x2="${X(d)}" y1="${mT}" y2="${mT+ph}" stroke="#eeeeee"/><text x="${X(d)}" y="${mT+ph+20}" text-anchor="middle">${lbl(d)}</text>`; });
+  // referencia y = x (la terminación no puede ser anterior a la fecha de datos)
+  const a=Math.max(x0,y0), b=Math.min(x1,y1); if(b>a) s+=`<line x1="${X(a)}" y1="${Y(a)}" x2="${X(b)}" y2="${Y(b)}" stroke="#bbb" stroke-dasharray="2 4"/>`;
+  if(o.banda){ let d='M'+F.map(f=>X(f.corte).toFixed(1)+','+Y(f.p90).toFixed(1)).join('L')+'L'+[...F].reverse().map(f=>X(f.corte).toFixed(1)+','+Y(f.p10).toFixed(1)).join('L')+'Z'; s+=`<path d="${d}" fill="#e6e6e6" stroke="none"/>`; }
+  // líneas horizontales: plan y fin real
+  const hl=[]; if(E.plan!=null) hl.push({v:E.plan,t:`fin planificado ${fmtDs(E.plan)}`,dash:'8 4',w:1.3});
+  if(E.real!=null) hl.push({v:E.real,t:`fin real ${fmtDs(E.real)}`,dash:'',w:1.3});
+  hl.forEach((h,k)=>{ s+=`<line x1="${mL}" x2="${mL+pw}" y1="${Y(h.v)}" y2="${Y(h.v)}" stroke="#555" stroke-width="${h.w}" ${h.dash?`stroke-dasharray="${h.dash}"`:''}/>`; });
+  // series
+  const path=k=>'M'+F.map(f=>X(f.corte).toFixed(1)+','+Y(f[k]).toFixed(1)).join('L');
+  s+=`<path d="${path('p80')}" fill="none" stroke="${ink}" stroke-width="1.8" stroke-dasharray="7 4"/><path d="${path('p50')}" fill="none" stroke="${ink}" stroke-width="2.4"/>`;
+  F.forEach(f=>{ s+=`<rect x="${X(f.corte)-3.5}" y="${Y(f.p80)-3.5}" width="7" height="7" fill="#fff" stroke="${ink}" stroke-width="1.4"/><circle cx="${X(f.corte)}" cy="${Y(f.p50)}" r="3.6" fill="${ink}"/>`; });
+  s+=`<rect x="${mL}" y="${mT}" width="${pw}" height="${ph}" fill="none" stroke="#888"/>`;
+  // etiquetas a la derecha, sin solaparse
+  const L=F[F.length-1], et=[{y:Y(L.p50),t:`P50 = ${fmtDs(Math.round(L.p50))}`,b:1},{y:Y(L.p80),t:`P80 = ${fmtDs(Math.round(L.p80))}`}].concat(hl.map(h=>({y:Y(h.v),t:h.t,small:1})));
+  et.sort((p,q)=>p.y-q.y); for(let i=1;i<et.length;i++) if(et[i].y-et[i-1].y<fs+3) et[i].y=et[i-1].y+fs+3;
+  for(let i=et.length-2;i>=0;i--) if(et[i].y>et[i+1].y-(fs+3)) et[i].y=et[i+1].y-(fs+3);
+  et.forEach(e=>{ s+=`<text x="${mL+pw+8}" y="${e.y+fs*0.35}" font-size="${e.small?fs-1:fs}" ${e.b?'font-weight="bold"':''}>${esc(e.t)}</text>`; });
+  // leyenda (fuera del área de datos, sobre el gráfico)
+  const ly=22; let lx=mL;
+  s+=`<line x1="${lx}" x2="${lx+30}" y1="${ly}" y2="${ly}" stroke="${ink}" stroke-width="2.4"/><circle cx="${lx+15}" cy="${ly}" r="3.6" fill="${ink}"/><text x="${lx+38}" y="${ly+5}">P50 pronosticado</text>`; lx+=190;
+  s+=`<line x1="${lx}" x2="${lx+30}" y1="${ly}" y2="${ly}" stroke="${ink}" stroke-width="1.8" stroke-dasharray="7 4"/><rect x="${lx+11.5}" y="${ly-3.5}" width="7" height="7" fill="#fff" stroke="${ink}" stroke-width="1.4"/><text x="${lx+38}" y="${ly+5}">P80 pronosticado</text>`; lx+=190;
+  if(o.banda){ s+=`<rect x="${lx}" y="${ly-6}" width="30" height="12" fill="#e6e6e6"/><text x="${lx+38}" y="${ly+5}">intervalo P10–P90</text>`; }
+  s+=`<text x="${mL+pw/2}" y="${H-14}" text-anchor="middle" font-size="${fs+1}">Fecha de datos (corte de la curva S)</text>
+    <text transform="translate(20 ${mT+ph/2}) rotate(-90)" text-anchor="middle" font-size="${fs+1}">Fecha de terminación pronosticada</text>`;
+  return {svg:s+'</svg>', W, H};
+}
+function pintarEvolucion(){
+  const full=proyActual(), el=$('#evBody'); if(!el) return;
+  if(!EVO || !full || EVO.key!==full.key){ el.innerHTML='<div class="empty">Pulsa «Calcular evolución».</div>'; return; }
+  const F=EVO.filas; if(!F.length){ el.innerHTML='<div class="empty">Sin datos para pronosticar.</div>'; return; }
+  const G=svgEvolucion(EVO,{banda:$('#evBanda').checked}), L=F[F.length-1], P0=F[0];
+  el.innerHTML=`<div class="kpis" style="margin:10px 0">
+      <div class="kpi"><div class="v">${F.length}</div><div class="l">Actualizaciones (cortes)</div></div>
+      <div class="kpi"><div class="v" style="font-size:17px">${fmtD(Math.round(P0.p80))}</div><div class="l">P80 en el primer corte (${fmtDs(P0.corte)})</div></div>
+      <div class="kpi hl"><div class="v" style="font-size:17px">${fmtD(Math.round(L.p80))}</div><div class="l">P80 en el último corte (${fmtDs(L.corte)})</div></div>
+      <div class="kpi"><div class="v">${Math.round(L.p80-P0.p80)>0?'+':''}${Math.round(L.p80-P0.p80)}<small> d</small></div><div class="l">Deriva del P80</div></div>
+      ${EVO.real!=null?`<div class="kpi"><div class="v" style="font-size:17px">${fmtD(EVO.real)}</div><div class="l">Fin real de la subred</div></div>`:''}</div>
+    <div class="figinf" style="background:#fff;border-radius:8px;padding:6px">${G.svg.replace('<svg ','<svg style="width:100%;height:auto;display:block" ')}</div>
+    <details style="margin-top:10px"><summary class="muted" style="cursor:pointer">Tabla por corte</summary>
+    <div class="tscroll" style="max-height:340px;margin-top:8px"><table class="t"><thead><tr><th>Corte</th><th class="num">Avance</th><th class="num">P10</th><th class="num">P50</th><th class="num">P80</th><th class="num">P90</th><th class="num">Δ P80</th><th class="num">P(≤ plan)</th></tr></thead><tbody>${
+      F.map((f,i)=>{ const dd=i?Math.round(f.p80)-Math.round(F[i-1].p80):null; return `<tr><td>${fmtD(f.corte)}</td><td class="num">${nf(f.avance)} %</td><td class="num">${fmtDs(Math.round(f.p10))}</td><td class="num">${fmtDs(Math.round(f.p50))}</td><td class="num"><b>${fmtDs(Math.round(f.p80))}</b></td><td class="num">${fmtDs(Math.round(f.p90))}</td><td class="num">${dd==null?'—':(dd>0?'+':'')+dd}</td><td class="num">${f.pPlan!=null?nf(f.pPlan*100)+' %':'—'}</td></tr>`; }).join('')}</tbody></table></div></details>`;
+}
+function pieEvolucion(){ const E=EVO; return `Evolución de la fecha de terminación pronosticada (P50 y P80${$('#evBanda').checked?', con intervalo P10–P90':''}) de ${E.proy} en cada actualización de la curva S (${E.filas.length} cortes; ${nf(E.N)} iteraciones por corte, distribución ${E.tipo==='pert'?'Beta-PERT':'triangular'}, semilla ${E.seed}, umbral de cierre ${WS.cfg.umbral} %). La línea punteada diagonal marca la fecha de datos: ningún pronóstico puede quedar por debajo de ella.`; }
+document.addEventListener('click',e=>{
+  if(e.target.closest('#evGo')){ correrEvolucion(); return; }
+  if(e.target.closest('#evFig')){ if(!EVO||EVO.key!==(proyActual()||{}).key) return toast('Calcula la evolución primero.');
+    modalFigura({titulo:'Evolución del pronóstico', G:svgEvolucion(EVO,{banda:$('#evBanda').checked}), nombre:'fig_evolucion_pronostico_'+slug(EVO.proy), pie:pieEvolucion()}); return; }
+  if(e.target.closest('#evTab')){ if(!EVO) return; const F=EVO.filas;
+    copiarTabla(['Fecha de datos','Avance (%)','P10','P50','P80','P90','Δ P80 (d)','P(≤ plan)'], F.map((f,i)=>[fmtD(f.corte), nf(f.avance), fmtD(Math.round(f.p10)), fmtD(Math.round(f.p50)), fmtD(Math.round(f.p80)), fmtD(Math.round(f.p90)), i?String(Math.round(f.p80)-Math.round(F[i-1].p80)):'—', f.pPlan!=null?nf(f.pPlan*100)+' %':'—']), 'tabla_evolucion_pronostico'); return; }
+});
+document.addEventListener('change',e=>{ if(e.target.id==='evBanda') pintarEvolucion(); });
 
 /* ---------- modal, toast, tooltip ---------- */
 function abrirModal(html){ $('#modal').innerHTML=html; $('#modalBg').classList.add('on'); }
